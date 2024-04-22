@@ -15,7 +15,6 @@ import org.apache.ftpserver.usermanager.PropertiesUserManagerFactory;
 import org.apache.ftpserver.usermanager.impl.BaseUser;
 import org.apache.ftpserver.usermanager.impl.WritePermission;
 import org.apache.log4j.PropertyConfigurator;
-
 public class MyFTPServer {
 
     public static void main(String[] args) {
@@ -52,7 +51,7 @@ public class MyFTPServer {
     user.setName("toto"); // Replace "username" with the desired username
     user.setPassword("tata"); // Replace "password" with the desired password
     String username = user.getName();
-    String homeDirectory = System.getProperty("java.io.tmpdir")  + username; 
+    String homeDirectory = System.getProperty("java.io.tmpdir")  + "/braga-23/" + username; 
     File directory = new File(homeDirectory); // Convert the string to a File object
     if (!directory.exists()) { // Check if the directory exists
         if (directory.mkdirs()) {
