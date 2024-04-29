@@ -1,4 +1,5 @@
 package rs;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -15,22 +16,65 @@ import org.apache.ftpserver.usermanager.PropertiesUserManagerFactory;
 import org.apache.ftpserver.usermanager.impl.BaseUser;
 import org.apache.ftpserver.usermanager.impl.WritePermission;
 import org.apache.log4j.PropertyConfigurator;
+
 public class MyFTPServer {
+    private static final int PORT = 3456;
 
     public static void main(String[] args) {
-    PropertyConfigurator.configure(MyFTPServer.class.getResource("/log4J.properties"));
-    FtpServerFactory serverFactory = new FtpServerFactory();
-    int port = 3456; // Replace 3456 with the desired port number
+        PropertyConfigurator.configure(MyFTPServer.class.getResource("/log4J.properties"));
+        FtpServerFactory serverFactory = new FtpServerFactory();
+        ListenerFactory listenerFactory = new ListenerFactory();
+        listenerFactory.setPort(PORT);
+        serverFactory.addListener("default", listenerFactory.createListener());
 
-    ListenerFactory listenerFactory = new ListenerFactory();
-    listenerFactory.setPort(port);
+        // Create a UserManager instance
+        PropertiesUserManagerFactory userManagerFactory = new PropertiesUserManagerFactory();
+        File userFile = new File("users.properties");
 
-    serverFactory.addListener("default", listenerFactory.createListener());
+        if (!userFile.exists())
+            createFile(userFile);
 
-    // Create a UserManager instance
-    PropertiesUserManagerFactory userManagerFactory = new PropertiesUserManagerFactory();
-    File userFile = new File("users.properties");
-    if (!userFile.exists()) {
+        userManagerFactory.setFile(userFile); // Specify the file to store user details
+        userManagerFactory.setPasswordEncryptor(new ClearTextPasswordEncryptor()); // Store plain text passwords
+        UserManager userManager = userManagerFactory.createUserManager();
+
+        // Create a user
+        BaseUser user = createUser();
+        String username = user.getName();
+        String homeDirectory = getHomeDirectory(username);
+
+        File directory = new File(homeDirectory); // Convert the string to a File object
+
+        if (!directory.exists())
+            createDirectory(directory);
+
+        user.setHomeDirectory(homeDirectory);
+
+        // Set write permissions for the user
+        giveWritePermissions(user, homeDirectory);
+
+        // Add the user to the user manager
+        try {
+            userManager.save(user);
+        } catch (FtpException e) {
+            e.printStackTrace();
+        }
+
+        // Set the user manager on the server context
+        serverFactory.setUserManager(userManager);
+
+        FtpServer server = serverFactory.createServer();
+
+        // Start the server
+        try {
+            server.start();
+            System.out.println("FTP Server started on port " + PORT);
+        } catch (FtpException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void createFile(File userFile) {
         try {
             if (userFile.createNewFile()) {
                 System.out.println("File created: " + userFile.getName());
@@ -42,51 +86,31 @@ public class MyFTPServer {
             e.printStackTrace();
         }
     }
-    
-    userManagerFactory.setFile(userFile); // Specify the file to store user details
-    userManagerFactory.setPasswordEncryptor(new ClearTextPasswordEncryptor()); // Store plain text passwords
-    UserManager userManager = userManagerFactory.createUserManager();
-    // Create a user
-    BaseUser user = new BaseUser();
-    user.setName("toto"); // Replace "username" with the desired username
-    user.setPassword("tata"); // Replace "password" with the desired password
-    String username = user.getName();
-    String homeDirectory = System.getProperty("java.io.tmpdir")  + "/braga-23/" + username; 
-    File directory = new File(homeDirectory); // Convert the string to a File object
-    if (!directory.exists()) { // Check if the directory exists
+
+    private static void giveWritePermissions(BaseUser user, String homeDirectory) {
+        List<Authority> authorities = new ArrayList<>();
+        authorities.add(new WritePermission());
+        user.setAuthorities(authorities);
+        user.setHomeDirectory(homeDirectory);
+    }
+
+    private static void createDirectory(File directory) {
         if (directory.mkdirs()) {
             System.out.println("Directory created: " + directory.getAbsolutePath());
         } else {
             System.out.println("Failed to create directory.");
         }
     }
-    user.setHomeDirectory(homeDirectory);
-    // Set write permissions for the user
-    List<Authority> authorities = new ArrayList<>();
-    authorities.add(new WritePermission());
-    user.setAuthorities(authorities);
-    user.setHomeDirectory(homeDirectory);
 
-    // Add the user to the user manager
-    try {
-        userManager.save(user);
-    } catch (FtpException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
+    private static BaseUser createUser() {
+        BaseUser user = new BaseUser();
+        user.setName("toto"); // Replace "username" with the desired username
+        user.setPassword("tata"); // Replace "password" with the desired password
+        return user;
     }
-    // Set the user manager on the server context
-    serverFactory.setUserManager(userManager);
 
-    FtpServer server = serverFactory.createServer();
-
-    // start the server
-    try {
-        server.start();
-        System.out.println("FTP Server started on port " + port);
-        
-    } catch (FtpException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-    }
+    private static String getHomeDirectory(String username) {
+        String homeDirectory = "/dev/shm/braga-23/" + username;
+        return homeDirectory;
     }
 }

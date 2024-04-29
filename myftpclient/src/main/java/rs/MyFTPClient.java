@@ -12,9 +12,9 @@ import java.io.InputStreamReader;
 import java.net.SocketException;
 
 public class MyFTPClient {
-    static final String username = "toto";
-    static final String password = "tata";
-    static final int port = 3456;
+    static final String USERNAME = "toto";
+    static final String PASSWORD = "tata";
+    static final int PORT = 3456;
     static FTPClient ftpClient;
 
     public static void main(String[] args) {
@@ -51,8 +51,8 @@ public class MyFTPClient {
 
     private static FTPClient connectToServer(String server) throws SocketException, IOException {
         FTPClient ftpClient = new FTPClient();
-        ftpClient.connect(server, port);
-        ftpClient.login(username, password);
+        ftpClient.connect(server, PORT);
+        ftpClient.login(USERNAME, PASSWORD);
         ftpClient.enterLocalPassiveMode();
         ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
         return ftpClient;
@@ -70,14 +70,17 @@ public class MyFTPClient {
         ftpClient.completePendingCommand();
     }
 
+    private static final int SUCCESS_CODE = 226;
+
     private static void createNewFile(String content) throws IOException {
         ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
         ftpClient.storeFile("bonjour.txt", inputStream);
-        int errorCode = ftpClient.getReplyCode();
-        if (errorCode != 226) {
-            System.out.println("File upload failed. FTP Error code: " + errorCode);
-        } else {
+        int replyCode = ftpClient.getReplyCode();
+
+        if (replyCode == SUCCESS_CODE) {
             System.out.println("File uploaded successfully.");
+        } else {
+            System.out.println("File upload failed. FTP Error code: " + replyCode);
         }
     }
 }
