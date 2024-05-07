@@ -1,5 +1,8 @@
 package rs;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,6 +19,17 @@ public class Utils {
         messages.set(index, messages.get(index) + lines.get(i));
     }
     return messages;
+  }
+
+  public static List<String> readLocalFile(String path) throws IOException {
+    List<String> contentList = new ArrayList<>();
+    BufferedReader reader = new BufferedReader(new FileReader(path));
+    String line;
+    while ((line = reader.readLine()) != null)
+      contentList.add(line);
+
+    reader.close();
+    return contentList;
   }
 
 }
