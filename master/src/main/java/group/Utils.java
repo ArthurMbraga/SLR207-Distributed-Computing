@@ -1,8 +1,9 @@
 package group;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,9 +22,11 @@ public class Utils {
     return messages;
   }
 
-  public static List<String> readLocalFile(String path) throws IOException {
+  public static List<String> readInputStream(InputStream in) throws IOException {
     List<String> contentList = new ArrayList<>();
-    BufferedReader reader = new BufferedReader(new FileReader(path));
+
+    BufferedReader reader = new BufferedReader(
+        new InputStreamReader(in));
     String line;
     while ((line = reader.readLine()) != null)
       contentList.add(line);

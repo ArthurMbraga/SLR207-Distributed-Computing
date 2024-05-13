@@ -9,7 +9,7 @@ import java.io.InputStreamReader;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 
-public class MasterFTPClient {
+public class FTPMultiClient {
     String[] hosts;
     int port;
 
@@ -18,14 +18,14 @@ public class MasterFTPClient {
     final String USERNAME = "toto";
     final String PASSWORD = "tata";
 
-    public MasterFTPClient(String[] hosts, int port) {
+    public FTPMultiClient(String[] hosts, int port) {
         this.hosts = hosts;
         this.port = port;
     }
 
     public void start() throws IOException {
         connections = new FTPClient[hosts.length];
-        for (int i = 0; i < hosts.length; i++) {
+        for (int i = 0; i < 1; i++) {
             connections[i] = new FTPClient();
             connections[i].connect(hosts[i], port);
             connections[i].login(USERNAME, PASSWORD);
