@@ -25,7 +25,7 @@ public class FTPMultiClient {
 
     public void start() throws IOException {
         connections = new FTPClient[hosts.length];
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < hosts.length; i++) {
             connections[i] = new FTPClient();
             connections[i].connect(hosts[i], port);
             connections[i].login(USERNAME, PASSWORD);
@@ -33,33 +33,6 @@ public class FTPMultiClient {
             connections[i].setFileType(FTP.BINARY_FILE_TYPE);
         }
     }
-
-    // public void sendSplit() throws Exception {
-    // List<String> fileLines = readLocalFile("./sampleText.txt");
-    // List<String> messages = Utils.groupStringList(fileLines, SERVERS.length);
-
-    // for (int i = 0; i < SERVERS.length; i++) {
-    // String server = SERVERS[i];
-    // ftpClient = connectToServer(server);
-
-    // // Code to display files
-    // FTPFile[] files = ftpClient.listFiles();
-    // boolean fileExists = false;
-    // for (FTPFile file : files) {
-    // if (file.getName().equals("bonjour.txt")) {
-    // fileExists = true;
-    // break;
-    // }
-    // }
-
-    // if (fileExists)
-    // retrieveFile();
-    // else
-    // createNewFile(messages.get(i));
-
-    // }
-
-    // }
 
     private void retrieveFile(String fileName, FTPClient connection) throws IOException {
         // Code to retrieve and display file content

@@ -11,21 +11,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 
-public class MySocketServer {
-    private static final int PORT = 1283;
+public class SocketServer {
+    private static final int PORT = 2234;
 
-    Socket[] connections;
-    int port;
-    String[] hosts;
-
-    public void start() throws IOException {
-        connections = new Socket[hosts.length];
-        for (int i = 0; i < hosts.length; i++)
-            connections[i] = new Socket(hosts[i], port);
-    }
-
-    public static void main(String args[]) {
-
+    public void start() {
         ServerSocket listener = null;
         String line;
         BufferedReader is;
@@ -48,13 +37,12 @@ public class MySocketServer {
             System.out.println("Accept a client!");
 
             // Open input and output streams
-            is = new BufferedReader(new InputStreamReader(socketOfServer.getInputStream()));
-            os = new BufferedWriter(new OutputStreamWriter(socketOfServer.getOutputStream()));
-
             while (true) {
+                is = new BufferedReader(new InputStreamReader(socketOfServer.getInputStream()));
+                os = new BufferedWriter(new OutputStreamWriter(socketOfServer.getOutputStream()));
                 // Read data to the server (sent from client).
                 line = is.readLine();
-
+                System.out.println("Read data from client: " + line);
                 // Write to socket of Server
                 // (Send to client)
                 os.write(">> " + line);
@@ -64,6 +52,8 @@ public class MySocketServer {
                 os.flush();
 
                 // If users send QUIT (To end conversation).
+                if (line == null)
+                    break;
                 if (line.equals("QUIT")) {
                     os.write(">> OK");
                     os.newLine();
@@ -82,7 +72,6 @@ public class MySocketServer {
             System.out.println(e);
             e.printStackTrace();
         }
-        System.out.println("Sever stopped!");
     }
 
     private static HashMap<String, Integer> mapFunction() throws FileNotFoundException, IOException {

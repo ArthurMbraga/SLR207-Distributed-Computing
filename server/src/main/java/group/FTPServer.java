@@ -16,11 +16,10 @@ import org.apache.ftpserver.usermanager.PropertiesUserManagerFactory;
 import org.apache.ftpserver.usermanager.impl.BaseUser;
 import org.apache.ftpserver.usermanager.impl.WritePermission;
 
-public class MyFTPServer {
+public class FTPServer {
     private static final int PORT = 3456;
 
-    public static void main(String[] args) {
-        Logger.configure();
+    public FTPServer() {
         FtpServerFactory serverFactory = new FtpServerFactory();
         ListenerFactory listenerFactory = new ListenerFactory();
         listenerFactory.setPort(PORT);
