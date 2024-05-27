@@ -36,7 +36,7 @@ public class Server {
         HashMap<Integer, String> shuffle = shuffleFunction(map);
         System.out.println("SHUFFLE: " + shuffle);
 
-        //TODO: parallelize this
+        // TODO: parallelize this
         for (int i = 0; i < servers.length; i++) {
           ftpMultiClient.sendFile(i, "Shuffle-" + identifier + ".txt", shuffle.get(i));
         }
@@ -66,7 +66,7 @@ public class Server {
   private static HashMap<String, Integer> mapFunction() throws FileNotFoundException, IOException {
     String line;
     HashMap<String, Integer> hashMap = new HashMap<>();
-    BufferedReader reader = new BufferedReader(new FileReader("/dev/shm/braga-23/Split.txt"));
+    BufferedReader reader = new BufferedReader(new FileReader("/dev/shm/braga-23/" + Constants.SPLIT_FILE_NAME));
 
     while ((line = reader.readLine()) != null) {
       String[] words = line.split(" ");

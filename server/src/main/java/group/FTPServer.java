@@ -17,7 +17,8 @@ import org.apache.ftpserver.usermanager.impl.BaseUser;
 import org.apache.ftpserver.usermanager.impl.WritePermission;
 
 public class FTPServer {
-    private static final int PORT = 3456;
+    private final int PORT = 3456;
+    private final String HOME_DIRECTORY = "/dev/shm/braga-23";
 
     public FTPServer() {
         FtpServerFactory serverFactory = new FtpServerFactory();
@@ -38,18 +39,16 @@ public class FTPServer {
 
         // Create a user
         BaseUser user = createUser();
-        String username = user.getName();
-        String homeDirectory = getHomeDirectory(username);
 
-        File directory = new File(homeDirectory); // Convert the string to a File object
+        File directory = new File(HOME_DIRECTORY); // Convert the string to a File object
 
         if (!directory.exists())
             createDirectory(directory);
 
-        user.setHomeDirectory(homeDirectory);
+        user.setHomeDirectory(HOME_DIRECTORY);
 
         // Set write permissions for the user
-        giveWritePermissions(user, homeDirectory);
+        giveWritePermissions(user, HOME_DIRECTORY);
 
         // Add the user to the user manager
         try {
@@ -107,8 +106,4 @@ public class FTPServer {
         return user;
     }
 
-    private static String getHomeDirectory(String username) {
-        String homeDirectory = "/dev/shm/braga-23/" + username;
-        return homeDirectory;
-    }
 }

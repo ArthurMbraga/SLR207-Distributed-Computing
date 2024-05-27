@@ -51,13 +51,13 @@ public class Master {
             .thenRunAsync(() -> {
               try {
                 System.out.println("Sending SPLIT file to server " + serverIndex);
-                ftpMultiClient.sendFile(serverIndex, "Split.txt", content);
+                ftpMultiClient.sendFile(serverIndex, Constants.SPLIT_FILE_NAME, content);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             }, executor).thenRunAsync(() -> {
               try {
-                System.out.println("Sending 'START MAP' to server " + serverIndex);
+                System.out.println("Sending 'MAP' to server " + serverIndex);
                 socketConnections.sendMessage(serverIndex, "MAP");
               } catch (Exception e) {
                 e.printStackTrace();
