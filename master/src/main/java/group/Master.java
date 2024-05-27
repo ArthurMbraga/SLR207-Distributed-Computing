@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class Master {
   // static final String[] SERVERS = { "tp-1a201-17", "tp-1a201-18", "tp-1a201-19"
@@ -35,21 +37,32 @@ public class Master {
         int serverIndex = i;
         String content = filesContent.get(i);
 
-        futures[i] = CompletableFuture.runAsync(() -> {
-          try {
-            ftpMultiClient.sendFile(serverIndex, "Split.txt", content);
-            System.out.println("Sent file to server " + serverIndex);
-          } catch (Exception e) {
-            e.printStackTrace();
-          }
-        }, executor).thenRunAsync(() -> {
-          try {
-            socketConnections.sendMessage(serverIndex, "File transfer complete for server " + serverIndex);
-            System.out.println("Sent message to server " + serverIndex);
-          } catch (Exception e) {
-            e.printStackTrace();
-          }
-        }, executor);
+        futures[i] = CompletableFuture
+            .runAsync(() -> {
+              try {
+                System.out.println("Sending IPS to server " + serverIndex);
+
+                String serverList = makeIpsMessage(serverIndex);
+                socketConnections.sendMessageAsync(serverIndex, serverList);
+              } catch (Exception e) {
+                e.printStackTrace();
+              }
+            }, executor)
+            .thenRunAsync(() -> {
+              try {
+                System.out.println("Sending SPLIT file to server " + serverIndex);
+                ftpMultiClient.sendFile(serverIndex, "Split.txt", content);
+              } catch (Exception e) {
+                e.printStackTrace();
+              }
+            }, executor).thenRunAsync(() -> {
+              try {
+                System.out.println("Sending 'START MAP' to server " + serverIndex);
+                socketConnections.sendMessage(serverIndex, "MAP");
+              } catch (Exception e) {
+                e.printStackTrace();
+              }
+            }, executor);
       }
 
       // Wait for all tasks to complete
@@ -60,5 +73,13 @@ public class Master {
     Exception e) {
       e.printStackTrace();
     }
+  }
+
+  public static String makeIpsMessage(int targetIp) {
+    String target = SERVERS[targetIp];
+    return "IPS " + target + ";" +
+        IntStream.range(0, SERVERS.length)
+            .mapToObj(index -> SERVERS[index])
+            .collect(Collectors.joining(";"));
   }
 }

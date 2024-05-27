@@ -2,94 +2,89 @@ package group;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class SocketServer {
     private static final int PORT = 2234;
+    private ExecutorService executor;
+    private MessageHandler messageHandler;
+
+    @FunctionalInterface
+    interface MessageHandler {
+        void onReceiveMessage(String message, BufferedWriter os) throws IOException;
+    }
+
+    public SocketServer() {
+        this.executor = Executors.newFixedThreadPool(10);
+    }
 
     public void start() {
-        ServerSocket listener = null;
-        String line;
-        BufferedReader is;
-        BufferedWriter os;
-        Socket socketOfServer = null;
+        try (ServerSocket listener = new ServerSocket(PORT)) {
+            System.out.println("Server is waiting to accept users...");
 
-        try {
-            listener = new ServerSocket(PORT);
-        } catch (IOException e) {
-            System.out.println(e);
-            System.exit(1);
-        }
-
-        try {
-            System.out.println("Server is waiting to accept user...");
-
-            // Accept client connection request
-            // Get new Socket at Server.
-            socketOfServer = listener.accept();
-            System.out.println("Accept a client!");
-
-            // Open input and output streams
             while (true) {
-                is = new BufferedReader(new InputStreamReader(socketOfServer.getInputStream()));
-                os = new BufferedWriter(new OutputStreamWriter(socketOfServer.getOutputStream()));
-                // Read data to the server (sent from client).
-                line = is.readLine();
-                System.out.println("Read data from client: " + line);
-                // Write to socket of Server
-                // (Send to client)
-                os.write(">> " + line);
-                // End of line
-                os.newLine();
-                // Flush data.
-                os.flush();
+                Socket socketOfServer = listener.accept();
+                System.out.println("Accepted a client!");
 
-                // If users send QUIT (To end conversation).
-                if (line == null)
-                    break;
-                if (line.equals("QUIT")) {
-                    os.write(">> OK");
-                    os.newLine();
-                    os.flush();
-                    break;
-                }
-                if (line.equals("MAP")) {
-                    HashMap<String, Integer> hashMap = mapFunction();
-                    System.out.println(hashMap);
-                    os.write(hashMap.toString());
-                    os.newLine();
-                    os.flush();
-                }
+                executor.execute(() -> {
+                    try {
+                        BufferedReader is = new BufferedReader(new InputStreamReader(socketOfServer.getInputStream()));
+                        BufferedWriter os = new BufferedWriter(
+                                new OutputStreamWriter(socketOfServer.getOutputStream()));
+
+                        while (true) {
+                            String message = is.readLine();
+                            if (message == null || "QUIT".equals(message)) {
+                                break;
+                            }
+                            messageHandler.onReceiveMessage(message, os);
+                        }
+                    } catch (IOException e) {
+                        System.out.println("Error handling a client: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                });
             }
         } catch (IOException e) {
-            System.out.println(e);
+            System.out.println("Server error: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            executor.shutdown();
         }
     }
 
-    private static HashMap<String, Integer> mapFunction() throws FileNotFoundException, IOException {
-        String line;
-        HashMap<String, Integer> hashMap = new HashMap<>();
-        BufferedReader reader = new BufferedReader(new FileReader("/dev/shm/braga-23/test.txt"));
-
-        while ((line = reader.readLine()) != null) {
-            String[] words = line.split(" ");
-            for (String word : words) {
-                if (hashMap.containsKey(word)) {
-                    hashMap.put(word, hashMap.get(word) + 1);
-                } else {
-                    hashMap.put(word, 1);
-                }
-            }
-        }
-        reader.close();
-        return hashMap;
+    public void setOnReceiveMessageListener(MessageHandler listener) {
+        this.messageHandler = listener::onReceiveMessage;
     }
+
 }
+
+// private void onReceiveMessage(String message, BufferedWriter os) {
+// try {
+// System.out.println("Processing message: " + message);
+// if ("QUIT".equals(message)) {
+// os.write(">> OK");
+// os.newLine();
+// os.flush();
+// } else if ("MAP".equals(message)) {
+// HashMap<String, Integer> hashMap = mapFunction();
+// System.out.println(hashMap);
+// os.write(hashMap.toString());
+// os.newLine();
+// os.flush();
+// } else {
+// os.write(">> " + message);
+// os.newLine();
+// os.flush();
+// }
+// } catch (IOException e) {
+// System.out.println("Error processing message: " + e.getMessage());
+// e.printStackTrace();
+// }
+// }
