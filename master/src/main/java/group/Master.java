@@ -6,9 +6,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Master {
-  // static final String[] SERVERS = { "tp-1a201-17", "tp-1a201-18", "tp-1a201-19"
-  // };
-  static final String[] SERVERS = { "localhost" };
+  static final String[] SERVERS = { "tp-1a201-17", "tp-1a201-18", "tp-1a201-19" };
+  // static final String[] SERVERS = { "localhost" };
   static final int FTP_PORT = 3456;
   static final int SOCKET_PORT = 2234;
 
@@ -139,7 +138,7 @@ public class Master {
       CompletableFuture.allOf(futures).join();
 
       /* ------------- */
-      /* Finished      */
+      /* Finished */
       /* ------------- */
       System.out.println("Finished");
 
@@ -158,7 +157,6 @@ public class Master {
             .collect(Collectors.joining(";"));
   }
 
-  
   private static String makeGroupsMessage(int min, int max, int numServers) {
     int range = max - min;
     int groupSize = range / numServers;
