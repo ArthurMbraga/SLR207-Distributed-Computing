@@ -2,8 +2,6 @@ package group;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -13,8 +11,6 @@ public class Master {
   static final String[] SERVERS = { "localhost" };
   static final int FTP_PORT = 3456;
   static final int SOCKET_PORT = 2234;
-
-  static ExecutorService executor = Executors.newFixedThreadPool(SERVERS.length);
 
   public static void main(String[] args) {
     FTPMultiClient ftpMultiClient = new FTPMultiClient(SERVERS, FTP_PORT);
@@ -37,7 +33,7 @@ public class Master {
         int serverIndex = i;
         String content = filesContent.get(i);
 
-        futures[i] = CompletableFuture
+        futures[serverIndex] = CompletableFuture
             .runAsync(() -> {
               try {
                 System.out.println("Sending IPS to server " + serverIndex);
@@ -47,7 +43,7 @@ public class Master {
               } catch (Exception e) {
                 e.printStackTrace();
               }
-            }, executor)
+            })
             .thenRunAsync(() -> {
               try {
                 System.out.println("Sending SPLIT file to server " + serverIndex);
@@ -55,18 +51,97 @@ public class Master {
               } catch (Exception e) {
                 e.printStackTrace();
               }
-            }, executor).thenRunAsync(() -> {
+            }).thenRunAsync(() -> {
               try {
                 System.out.println("Sending 'MAP' to server " + serverIndex);
                 socketConnections.sendMessage(serverIndex, "MAP");
               } catch (Exception e) {
                 e.printStackTrace();
               }
-            }, executor);
+            });
       }
 
       // Wait for all tasks to complete
       CompletableFuture.allOf(futures).join();
+
+      /* ------------ */
+      /* REDUCE phase */
+      /* ------------ */
+      System.out.println("Starting reduce phase");
+
+      futures = new CompletableFuture[SERVERS.length];
+
+      Integer[] range = { Integer.MAX_VALUE, 0 }; // [min, max]
+      for (int i = 0; i < SERVERS.length; i++) {
+        int serverIndex = i;
+
+        futures[serverIndex] = CompletableFuture.runAsync(() -> {
+          try {
+            String response = socketConnections.sendMessage(serverIndex, "REDUCE");
+            String[] minMax = response.split(",");
+
+            int min = Integer.parseInt(minMax[0]);
+            int max = Integer.parseInt(minMax[1]);
+
+            if (min < range[0])
+              range[0] = min;
+
+            if (max > range[1])
+              range[1] = max;
+
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        });
+      }
+      CompletableFuture.allOf(futures).join();
+
+      /* ----------- */
+      /* GROUP phase */
+      /* ----------- */
+      System.out.println("Starting group phase");
+      System.out.println("Min: " + range[0] + " Max: " + range[1]);
+      String groupMessage = makeGroupsMessage(range[0], range[1] + 1, SERVERS.length);
+
+      futures = new CompletableFuture[SERVERS.length];
+      for (int i = 0; i < SERVERS.length; i++) {
+        int serverIndex = i;
+
+        futures[serverIndex] = CompletableFuture.runAsync(() -> {
+          try {
+            System.out.println("Sending GROUP message to server " + serverIndex);
+            socketConnections.sendMessage(serverIndex, groupMessage);
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        });
+      }
+      CompletableFuture.allOf(futures).join();
+
+      /* ------------- */
+      /* REDUCE phase2 */
+      /* ------------- */
+      System.out.println("Starting reduce phase 2");
+
+      futures = new CompletableFuture[SERVERS.length];
+      for (int i = 0; i < SERVERS.length; i++) {
+        int serverIndex = i;
+
+        futures[serverIndex] = CompletableFuture.runAsync(() -> {
+          try {
+            socketConnections.sendMessageAsync(serverIndex, "REDUCE2");
+            System.out.println("Sent REDUCE2 to server " + serverIndex);
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        });
+      }
+      CompletableFuture.allOf(futures).join();
+
+      /* ------------- */
+      /* Finished      */
+      /* ------------- */
+      System.out.println("Finished");
 
     } catch (
 
@@ -75,11 +150,31 @@ public class Master {
     }
   }
 
-  public static String makeIpsMessage(int targetIp) {
+  private static String makeIpsMessage(int targetIp) {
     String target = SERVERS[targetIp];
     return "IPS " + target + ";" +
         IntStream.range(0, SERVERS.length)
             .mapToObj(index -> SERVERS[index])
             .collect(Collectors.joining(";"));
+  }
+
+  
+  private static String makeGroupsMessage(int min, int max, int numServers) {
+    int range = max - min;
+    int groupSize = range / numServers;
+    int remainder = range % numServers;
+
+    return IntStream.range(0, numServers)
+        .mapToObj(i -> {
+          int groupMin = min + i * groupSize;
+          int groupMax = groupMin + groupSize;
+
+          if (i == numServers - 1) {
+            groupMax += remainder;
+          }
+
+          return groupMin + "," + groupMax;
+        })
+        .collect(Collectors.joining(";", "GROUP ", ""));
   }
 }

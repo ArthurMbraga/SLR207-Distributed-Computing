@@ -61,6 +61,10 @@ public class FTPMultiClient {
     }
 
     public void sendFile(int id, String filename, String content) throws IOException {
+        if (filename == null || content == null) {
+            throw new IllegalArgumentException("Filename or content cannot be null");
+        }
+
         FTPClient ftpClient = connections[id];
         createNewFile(content, filename, ftpClient);
     }

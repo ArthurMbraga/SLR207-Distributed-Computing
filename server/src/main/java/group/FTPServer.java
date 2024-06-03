@@ -41,6 +41,7 @@ public class FTPServer {
         BaseUser user = createUser();
 
         File directory = new File(HOME_DIRECTORY); // Convert the string to a File object
+        System.out.println(directory.exists());
 
         if (!directory.exists())
             createDirectory(directory);
