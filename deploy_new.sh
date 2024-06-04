@@ -16,8 +16,14 @@ nameOfTheJarToExecute="server-1-jar-with-dependencies.jar"
 # List of computers
 computers=("tp-1a201-17" "tp-1a201-18" "tp-1a201-19")
 
+# Check the operating system
+if [[ $(uname) == "Linux" ]]; then
+  prefix=("sshpass" "-p" "$password")
+else
+  prefix=("plink" "-l" "$login" "-pw" "$password")
+fi
+
 for c in "${computers[@]}"; do
-  sshpass=("sshpass" "-p" "$password")
   # Command to kill all the user processes, remove the remote folder and create a new one
   command0=("ssh" "$login@$c" "lsof -ti | xargs kill -9 2>/dev/null; rm -rf $remoteFolder; mkdir $remoteFolder")
   
@@ -28,10 +34,10 @@ for c in "${computers[@]}"; do
   command2=("ssh" "-tt" "$login@$c" "cd $remoteFolder; sleep 3; java -jar $remoteFolder/$nameOfTheJarToExecute")
 
   echo "${command0[*]}"
-  "${sshpass[@]}" "${command0[@]}"
+  "${prefix[@]}" "${command0[@]}"
   echo "${command1[*]}"
-  "${sshpass[@]}" "${command1[@]}"
+  "${prefix[@]}" "${command1[@]}"
   echo "${command2[*]}"
-  "${sshpass[@]}" "${command2[@]}" &
+  "${prefix[@]}" "${command2[@]}" &
   
 done

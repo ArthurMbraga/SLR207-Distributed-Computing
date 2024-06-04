@@ -42,10 +42,8 @@ public class Server {
     messageHandler.startsWith("MAP", (message, os) -> {
       try {
         HashMap<String, Integer> map = mapFunction();
-        System.out.println("MAP: " + map);
 
         List<String> shuffle = shuffleFunction(map);
-        System.out.println("SHUFFLE: " + shuffle);
 
         CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
 
@@ -76,9 +74,12 @@ public class Server {
           servers = Arrays.copyOfRange(ips, 1, ips.length);
 
           try {
-            System.out.println("Received IPS: " + servers);
             ftpMultiClient = new FTPMultiClient(servers, FTP_PORT);
             ftpMultiClient.start();
+
+            os.write("IPS");
+            os.newLine();
+            os.flush();
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -138,9 +139,6 @@ public class Server {
       for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
         String key = entry.getKey();
         Integer value = entry.getValue();
-        //Print key value
-        System.out.println("Key: " + key + " Value: " + value);
-
 
         // Find server index by searching in ranges and finding when the value is in
         // range [min, max).
@@ -178,6 +176,19 @@ public class Server {
         e.printStackTrace();
       }
 
+    });
+
+    messageHandler.startsWith("FINISH", (message, os) -> {
+      try {
+        os.write("FINISH");
+        os.newLine();
+        os.flush();
+
+        ftpMultiClient.close();
+        socketServer.stop();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     });
 
     messageHandler.startsWith(null, (message, os) -> {

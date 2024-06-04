@@ -12,8 +12,6 @@ public class SocketMultiClient {
     String[] hosts;
 
     Socket[] connections;
-    BufferedWriter os = null;
-    BufferedReader is = null;
 
     public SocketMultiClient(String[] hosts, int port) {
         this.hosts = hosts;
@@ -28,7 +26,7 @@ public class SocketMultiClient {
 
     public void sendMessageAsync(int serverIndex, String message) {
         try {
-            os = new BufferedWriter(new OutputStreamWriter(connections[serverIndex].getOutputStream()));
+            BufferedWriter os = new BufferedWriter(new OutputStreamWriter(connections[serverIndex].getOutputStream()));
             os.write(message);
             os.newLine();
             os.flush();
@@ -39,8 +37,8 @@ public class SocketMultiClient {
 
     public String sendMessage(int serverIndex, String message) {
         try {
-            os = new BufferedWriter(new OutputStreamWriter(connections[serverIndex].getOutputStream()));
-            is = new BufferedReader(new InputStreamReader(connections[serverIndex].getInputStream()));
+            BufferedWriter os = new BufferedWriter(new OutputStreamWriter(connections[serverIndex].getOutputStream()));
+            BufferedReader is = new BufferedReader(new InputStreamReader(connections[serverIndex].getInputStream()));
             os.write(message);
             os.newLine();
             os.flush();
@@ -49,6 +47,12 @@ public class SocketMultiClient {
         } catch (IOException e) {
             e.printStackTrace();
             return null;
+        }
+    }
+
+    public void close() throws IOException {
+        for (int i = 0; i < connections.length; i++) {
+            connections[i].close();
         }
     }
 

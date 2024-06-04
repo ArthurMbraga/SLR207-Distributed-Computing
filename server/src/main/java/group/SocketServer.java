@@ -14,6 +14,7 @@ public class SocketServer {
     private static final int PORT = 2234;
     private ExecutorService executor;
     private MessageHandler messageHandler;
+    private boolean isStopped = false;
 
     @FunctionalInterface
     interface MessageHandler {
@@ -28,7 +29,7 @@ public class SocketServer {
         try (ServerSocket listener = new ServerSocket(PORT)) {
             System.out.println("Server is waiting to accept users...");
 
-            while (true) {
+            while (!isStopped) {
                 Socket socketOfServer = listener.accept();
                 System.out.println("Accepted a client!");
 
@@ -63,6 +64,10 @@ public class SocketServer {
         this.messageHandler = listener::onReceiveMessage;
     }
 
+    public void stop() {
+        isStopped = true;
+        executor.shutdown();
+    }
 }
 
 // private void onReceiveMessage(String message, BufferedWriter os) {

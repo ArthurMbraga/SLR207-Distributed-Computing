@@ -13,13 +13,13 @@ Then, you need to copy the jar file to the télécom machine.
 for the master machine:
 
 ```bash
-scp -P 2222 master/target/master-1.0-jar-with-dependencies.jar your-login@telecom-machine /dev/shm/your-login
+scp master/target/master-1.0-jar-with-dependencies.jar your-login@telecom-machine:/dev/shm/your-login
 ```
 
 for the server machines:
 
 ```bash
-scp -P 2222 server/target/server-1.0-jar-with-dependencies.jar your-login@telecom-machine /dev/shm/your-login
+scp server/target/server-1.0-jar-with-dependencies.jar your-login@telecom-machine:/dev/shm/your-login
 ```
 
 Then, you can run the project using the following command:

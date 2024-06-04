@@ -35,25 +35,33 @@ public class Master {
         futures[serverIndex] = CompletableFuture
             .runAsync(() -> {
               try {
-                System.out.println("Sending IPS to server " + serverIndex);
+                System.out.println("Sending SPLIT file to server " + serverIndex);
 
-                String serverList = makeIpsMessage(serverIndex);
-                socketConnections.sendMessageAsync(serverIndex, serverList);
+                ftpMultiClient.sendFile(serverIndex, Constants.SPLIT_FILE_NAME, content);
+
+                System.out.println("SPLIT finish from server " + serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             })
             .thenRunAsync(() -> {
               try {
-                System.out.println("Sending SPLIT file to server " + serverIndex);
-                ftpMultiClient.sendFile(serverIndex, Constants.SPLIT_FILE_NAME, content);
+                System.out.println("Sending IPS to server " + serverIndex);
+
+                String serverList = makeIpsMessage(serverIndex);
+                socketConnections.sendMessage(serverIndex, serverList);
+
+                System.out.println("ACK from server " + serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             }).thenRunAsync(() -> {
               try {
                 System.out.println("Sending 'MAP' to server " + serverIndex);
+
                 socketConnections.sendMessage(serverIndex, "MAP");
+
+                System.out.println("MAP finish from server " + serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
@@ -141,6 +149,25 @@ public class Master {
       /* Finished */
       /* ------------- */
       System.out.println("Finished");
+
+      futures = new CompletableFuture[SERVERS.length];
+      for (int i = 0; i < SERVERS.length; i++) {
+        int serverIndex = i;
+
+        futures[serverIndex] = CompletableFuture.runAsync(() -> {
+          try {
+            socketConnections.sendMessage(serverIndex, "FINISH");
+            System.out.println("Sent FINISH to server " + serverIndex);
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        });
+      }
+
+      CompletableFuture.allOf(futures).join();
+
+      socketConnections.close();
+      ftpMultiClient.close();
 
     } catch (
 
