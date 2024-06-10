@@ -1,5 +1,7 @@
 package group;
 
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -23,9 +25,16 @@ public class Master {
       /* ----------- */
       System.out.println("Starting split phase");
 
-      List<String> fileLines = Utils.readInputStream(Master.class.getResourceAsStream("/sampleText.txt"));
+      InputStream inputStream = new FileInputStream(
+          "/cal/commoncrawl/CC-MAIN-20230320144934-20230320174934-00001.warc.wet");
+
+      List<String> fileLines = Utils.readInputStream(inputStream);
       List<String> filesContent = Utils.groupStringList(fileLines, SERVERS.length);
       CompletableFuture<?>[] futures = new CompletableFuture[SERVERS.length];
+
+      MyMultipleTimer communication = new MyMultipleTimer(SERVERS.length);
+      MyMultipleTimer synchronization = new MyMultipleTimer(SERVERS.length);
+      MyMultipleTimer computation = new MyMultipleTimer(SERVERS.length);
 
       for (int i = 0; i < SERVERS.length; i++) {
         int serverIndex = i;
@@ -34,54 +43,72 @@ public class Master {
         futures[serverIndex] = CompletableFuture
             .runAsync(() -> {
               try {
+                communication.start(serverIndex);
                 System.out.println("Sending SPLIT file to server " + serverIndex);
 
                 ftpMultiClient.sendFile(serverIndex, Constants.SPLIT_FILE_NAME, content);
 
                 System.out.println("SPLIT finish from server " + serverIndex);
+                communication.pause(serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             })
             .thenRunAsync(() -> {
               try {
+                synchronization.start(serverIndex);
                 System.out.println("Sending IPS to server " + serverIndex);
 
                 String serverList = makeIpsMessage(serverIndex);
                 socketConnections.sendMessage(serverIndex, serverList);
 
                 System.out.println("ACK from server " + serverIndex);
+                synchronization.pause(serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             }).thenRunAsync(() -> {
               try {
+                computation.start(serverIndex);
                 System.out.println("Sending 'MAP' to server " + serverIndex);
 
-                socketConnections.sendMessage(serverIndex, "MAP");
+                CompletableFuture<String>[] responsesFutures = socketConnections.sendMessage(serverIndex, "MAP", 2);
+
+                // First response: Map
+                responsesFutures[0].join();
+                computation.pause(serverIndex);
+
+                // Second response: Shuffle
+                communication.start(serverIndex);
+                responsesFutures[1].join();
+                communication.pause(serverIndex);
 
                 System.out.println("MAP finish from server " + serverIndex);
+                computation.pause(serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             });
       }
+
       CompletableFuture.allOf(futures).join();
 
       /* ------------ */
       /* REDUCE phase */
       /* ------------ */
       System.out.println("Starting reduce phase");
-
       futures = new CompletableFuture[SERVERS.length];
 
-      Integer[] range = { Integer.MAX_VALUE, 0 }; // [min, max]
+      // range = [min, max]
+      Integer[] range = { Integer.MAX_VALUE, 0 };
       for (int i = 0; i < SERVERS.length; i++) {
         int serverIndex = i;
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
+            computation.start(serverIndex);
             String response = socketConnections.sendMessage(serverIndex, "REDUCE");
+
             String[] minMax = response.split(",");
 
             int min = Integer.parseInt(minMax[0]);
@@ -93,11 +120,13 @@ public class Master {
             if (max > range[1])
               range[1] = max;
 
+            computation.pause(serverIndex);
           } catch (Exception e) {
             e.printStackTrace();
           }
         });
       }
+
       CompletableFuture.allOf(futures).join();
 
       /* ----------- */
@@ -113,13 +142,27 @@ public class Master {
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
+            computation.start(serverIndex);
+
             System.out.println("Sending GROUP message to server " + serverIndex);
-            socketConnections.sendMessage(serverIndex, groupMessage);
+            CompletableFuture<String>[] responses = socketConnections.sendMessage(serverIndex, groupMessage, 2);
+
+            // First response: MAP2
+            responses[0].join();
+            computation.pause(serverIndex);
+
+            // Second response: SHUFFLE2
+            communication.start(serverIndex);
+            responses[1].join();
+            communication.pause(serverIndex);
+
+            synchronization.pause(serverIndex);
           } catch (Exception e) {
             e.printStackTrace();
           }
         });
       }
+
       CompletableFuture.allOf(futures).join();
 
       /* ------------- */
@@ -133,13 +176,17 @@ public class Master {
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
+            computation.start(serverIndex);
             socketConnections.sendMessageAsync(serverIndex, "REDUCE2");
             System.out.println("Sent REDUCE2 to server " + serverIndex);
+            computation.pause(serverIndex);
+
           } catch (Exception e) {
             e.printStackTrace();
           }
         });
       }
+
       CompletableFuture.allOf(futures).join();
 
       /* -------- */
@@ -165,6 +212,21 @@ public class Master {
 
       socketConnections.close();
       ftpMultiClient.close();
+
+      /* --------------- */
+      /* Writing Metrics */
+      /* --------------- */
+      long comm = communication.getLongestElapsedTime();
+      long sync = synchronization.getLongestElapsedTime();
+      long comp = computation.getLongestElapsedTime();
+
+      System.out.println("Total elapsed time: " + comm + sync + comp);
+      System.out.println("Communication: " + comm);
+      System.out.println("Synchronization: " + sync);
+      System.out.println("Computation: " + comp);
+
+      long metric = (comm + sync) / comp;
+      System.out.println("Metric: " + metric);
 
     } catch (Exception e) {
       e.printStackTrace();

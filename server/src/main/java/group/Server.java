@@ -44,6 +44,10 @@ public class Server {
           try {
             HashMap<String, Integer> map = mapFunction();
 
+            os.write("MAP");
+            os.newLine();
+            os.flush();
+
             List<String> shuffle = shuffleFunction(map);
 
             CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
@@ -128,6 +132,11 @@ public class Server {
 
     messageHandler.startsWith("GROUP",
         (message, os) -> {
+
+          /* --- */
+          /* Map */
+          /* --- */
+
           Integer[][] ranges = Arrays.stream(message.split(";"))
               .map(r -> r.split(","))
               .map(range -> new Integer[] { Integer.parseInt(range[0]), Integer.parseInt(range[1]) })
@@ -157,6 +166,18 @@ public class Server {
               filesContents[serverIndex] += "\n" + key + "," + value;
           }
 
+          try {
+            os.write("MAP2");
+            os.newLine();
+            os.flush();
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+
+          /* --------- */
+          /* Shuffle 2 */
+          /* --------- */
+
           CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
 
           IntStream.range(0, servers.length).forEach(i -> {
@@ -173,7 +194,7 @@ public class Server {
           CompletableFuture.allOf(futures).join();
 
           try {
-            os.write("GROUP");
+            os.write("SHUFFLE2");
             os.newLine();
             os.flush();
           } catch (IOException e) {

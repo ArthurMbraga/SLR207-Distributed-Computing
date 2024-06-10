@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
+import java.util.concurrent.CompletableFuture;
 
 public class SocketMultiClient {
     int port;
@@ -44,6 +45,35 @@ public class SocketMultiClient {
             os.flush();
             String response = is.readLine();
             return response;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public CompletableFuture<String>[] sendMessage(int serverIndex, String message, int numberOfResponses) {
+        try {
+            BufferedWriter os = new BufferedWriter(new OutputStreamWriter(connections[serverIndex].getOutputStream()));
+            BufferedReader is = new BufferedReader(new InputStreamReader(connections[serverIndex].getInputStream()));
+            os.write(message);
+            os.newLine();
+            os.flush();
+
+            @SuppressWarnings("unchecked")
+            CompletableFuture<String>[] responses = new CompletableFuture[numberOfResponses];
+
+            for (int i = 0; i < numberOfResponses; i++) {
+                responses[i] = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return is.readLine();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        return null;
+                    }
+                });
+            }
+
+            return responses;
         } catch (IOException e) {
             e.printStackTrace();
             return null;
