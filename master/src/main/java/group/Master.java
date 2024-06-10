@@ -7,7 +7,6 @@ import java.util.stream.IntStream;
 
 public class Master {
   static final String[] SERVERS = { "tp-1a201-17", "tp-1a201-18", "tp-1a201-19" };
-  // static final String[] SERVERS = { "localhost" };
   static final int FTP_PORT = 3456;
   static final int SOCKET_PORT = 2234;
 
@@ -67,8 +66,6 @@ public class Master {
               }
             });
       }
-
-      // Wait for all tasks to complete
       CompletableFuture.allOf(futures).join();
 
       /* ------------ */
@@ -145,9 +142,9 @@ public class Master {
       }
       CompletableFuture.allOf(futures).join();
 
-      /* ------------- */
+      /* -------- */
       /* Finished */
-      /* ------------- */
+      /* -------- */
       System.out.println("Finished");
 
       futures = new CompletableFuture[SERVERS.length];
@@ -169,9 +166,7 @@ public class Master {
       socketConnections.close();
       ftpMultiClient.close();
 
-    } catch (
-
-    Exception e) {
+    } catch (Exception e) {
       e.printStackTrace();
     }
   }

@@ -69,27 +69,3 @@ public class SocketServer {
         executor.shutdown();
     }
 }
-
-// private void onReceiveMessage(String message, BufferedWriter os) {
-// try {
-// System.out.println("Processing message: " + message);
-// if ("QUIT".equals(message)) {
-// os.write(">> OK");
-// os.newLine();
-// os.flush();
-// } else if ("MAP".equals(message)) {
-// HashMap<String, Integer> hashMap = mapFunction();
-// System.out.println(hashMap);
-// os.write(hashMap.toString());
-// os.newLine();
-// os.flush();
-// } else {
-// os.write(">> " + message);
-// os.newLine();
-// os.flush();
-// }
-// } catch (IOException e) {
-// System.out.println("Error processing message: " + e.getMessage());
-// e.printStackTrace();
-// }
-// }

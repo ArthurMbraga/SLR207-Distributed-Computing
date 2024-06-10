@@ -25,8 +25,7 @@ public class Utils {
   public static List<String> readInputStream(InputStream in) throws IOException {
     List<String> contentList = new ArrayList<>();
 
-    BufferedReader reader = new BufferedReader(
-        new InputStreamReader(in));
+    BufferedReader reader = new BufferedReader(new InputStreamReader(in));
     String line;
     while ((line = reader.readLine()) != null)
       contentList.add(line);

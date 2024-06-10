@@ -39,33 +39,34 @@ public class Server {
 
     MessageHandler messageHandler = new MessageHandler();
 
-    messageHandler.startsWith("MAP", (message, os) -> {
-      try {
-        HashMap<String, Integer> map = mapFunction();
+    messageHandler.startsWith("MAP",
+        (message, os) -> {
+          try {
+            HashMap<String, Integer> map = mapFunction();
 
-        List<String> shuffle = shuffleFunction(map);
+            List<String> shuffle = shuffleFunction(map);
 
-        CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
+            CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
 
-        IntStream.range(0, servers.length).forEach(i -> {
-          futures[i] = CompletableFuture.runAsync(() -> {
-            try {
-              ftpMultiClient.sendFile(i, Constants.SHUFFLE_FILE_PREFIX + "-" + identifier + ".txt", shuffle.get(i));
-            } catch (IOException e) {
-              e.printStackTrace();
-            }
-          });
+            IntStream.range(0, servers.length).forEach(i -> {
+              futures[i] = CompletableFuture.runAsync(() -> {
+                try {
+                  ftpMultiClient.sendFile(i, Constants.SHUFFLE_FILE_PREFIX + "-" + identifier + ".txt", shuffle.get(i));
+                } catch (IOException e) {
+                  e.printStackTrace();
+                }
+              });
+            });
+
+            // Wait for all tasks to complete
+            CompletableFuture.allOf(futures).join();
+            os.write("SHUFFLE");
+            os.newLine();
+            os.flush();
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
         });
-
-        // Wait for all tasks to complete
-        CompletableFuture.allOf(futures).join();
-        os.write("SHUFFLE");
-        os.newLine();
-        os.flush();
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    });
 
     messageHandler.startsWith("IPS",
         (message, os) -> {
@@ -85,123 +86,140 @@ public class Server {
           }
         });
 
-    messageHandler.startsWith("REDUCE2", (message, os) -> {
-      try {
-        File directory = new File("/dev/shm/braga-23/");
-        File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.GROUP_FILE_PREFIX));
-
-        if (files != null) {
-          HashMap<String, Integer> finalResult = reduceFunction(files);
-          String fileContent = mapToString(finalResult);
-
-          // Write file in local directory
-          File file = new File("/dev/shm/braga-23/finalResult.txt");
-          BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-          writer.write(fileContent);
-          writer.close();
-        }
-      } catch (Exception e) {
-        e.printStackTrace();
-      }
-    });
-
-    messageHandler.startsWith("REDUCE", (message, os) -> {
-      try {
-        File directory = new File("/dev/shm/braga-23/");
-        File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.SHUFFLE_FILE_PREFIX));
-
-        if (files != null) {
-          reduceMap = reduceFunction(files);
-          Integer[] minMax = findMinMaxFreq(reduceMap);
-
-          os.write(minMax[0] + "," + minMax[1]);
-          os.newLine();
-          os.flush();
-        }
-      } catch (Exception e) {
-        e.printStackTrace();
-      }
-    });
-
-    messageHandler.startsWith("GROUP", (message, os) -> {
-      Integer[][] ranges = Arrays.stream(message.split(";"))
-          .map(r -> r.split(","))
-          .map(range -> new Integer[] { Integer.parseInt(range[0]), Integer.parseInt(range[1]) })
-          .toArray(Integer[][]::new);
-
-      String[] filesContents = new String[servers.length];
-
-      // Print ranges
-      for (int i = 0; i < ranges.length; i++) {
-        System.out.println("Range " + i + ": " + ranges[i][0] + " - " + ranges[i][1]);
-      }
-
-      for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
-        String key = entry.getKey();
-        Integer value = entry.getValue();
-
-        // Find server index by searching in ranges and finding when the value is in
-        // range [min, max).
-        int serverIndex = IntStream.range(0, ranges.length)
-            .filter(i -> value >= ranges[i][0] && value < ranges[i][1])
-            .findFirst()
-            .orElse(-1);
-
-        if (filesContents[serverIndex] == null)
-          filesContents[serverIndex] = key + "," + value;
-        else
-          filesContents[serverIndex] += "\n" + key + "," + value;
-      }
-
-      CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
-
-      IntStream.range(0, servers.length).forEach(i -> {
-        futures[i] = CompletableFuture.runAsync(() -> {
+    messageHandler.startsWith("REDUCE2",
+        (message, os) -> {
           try {
-            ftpMultiClient.sendFile(i, Constants.GROUP_FILE_PREFIX + "-" + identifier + ".txt", filesContents[i]);
+            File directory = new File("/dev/shm/braga-23/");
+            File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.GROUP_FILE_PREFIX));
+
+            if (files != null) {
+              HashMap<String, Integer> finalResult = reduceFunction(files);
+              String fileContent = mapToString(finalResult);
+
+              // Write file in local directory
+              File file = new File("/dev/shm/braga-23/finalResult.txt");
+              BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+              writer.write(fileContent);
+              writer.close();
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        });
+
+    messageHandler.startsWith("REDUCE",
+        (message, os) -> {
+          try {
+            File directory = new File("/dev/shm/braga-23/");
+            File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.SHUFFLE_FILE_PREFIX));
+
+            if (files != null) {
+              reduceMap = reduceFunction(files);
+              Integer[] minMax = findMinMaxFreq(reduceMap);
+
+              os.write(minMax[0] + "," + minMax[1]);
+              os.newLine();
+              os.flush();
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        });
+
+    messageHandler.startsWith("GROUP",
+        (message, os) -> {
+          Integer[][] ranges = Arrays.stream(message.split(";"))
+              .map(r -> r.split(","))
+              .map(range -> new Integer[] { Integer.parseInt(range[0]), Integer.parseInt(range[1]) })
+              .toArray(Integer[][]::new);
+
+          String[] filesContents = new String[servers.length];
+
+          // Print ranges
+          for (int i = 0; i < ranges.length; i++) {
+            System.out.println("Range " + i + ": " + ranges[i][0] + " - " + ranges[i][1]);
+          }
+
+          for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
+            String key = entry.getKey();
+            Integer value = entry.getValue();
+
+            // Find server index by searching in ranges and finding when the value is in
+            // range [min, max).
+            int serverIndex = IntStream.range(0, ranges.length)
+                .filter(i -> value >= ranges[i][0] && value < ranges[i][1])
+                .findFirst()
+                .orElse(-1);
+
+            if (filesContents[serverIndex] == null)
+              filesContents[serverIndex] = key + "," + value;
+            else
+              filesContents[serverIndex] += "\n" + key + "," + value;
+          }
+
+          CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
+
+          IntStream.range(0, servers.length).forEach(i -> {
+            futures[i] = CompletableFuture.runAsync(() -> {
+              try {
+                ftpMultiClient.sendFile(i, Constants.GROUP_FILE_PREFIX + "-" + identifier + ".txt", filesContents[i]);
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
+            });
+          });
+
+          // Wait for all tasks to complete
+          CompletableFuture.allOf(futures).join();
+
+          try {
+            os.write("GROUP");
+            os.newLine();
+            os.flush();
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+
+        });
+
+    messageHandler.startsWith("FINISH",
+        (message, os) -> {
+          try {
+            os.write("FINISH");
+            os.newLine();
+            os.flush();
+
+            // Clear files
+            File directory = new File("/dev/shm/braga-23/");
+            File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.SHUFFLE_FILE_PREFIX)
+                || name.startsWith(Constants.GROUP_FILE_PREFIX));
+
+            if (files != null)
+              for (File file : files)
+                file.delete();
+
+            ftpMultiClient.close();
+            socketServer.stop();
           } catch (IOException e) {
             e.printStackTrace();
           }
         });
-      });
 
-      // Wait for all tasks to complete
-      CompletableFuture.allOf(futures).join();
+    messageHandler.startsWith(null,
+        (message, os) -> {
+          System.out.println("Unhandled message: " + message);
+        });
 
-      try {
-        os.write("GROUP");
-        os.newLine();
-        os.flush();
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-
-    });
-
-    messageHandler.startsWith("FINISH", (message, os) -> {
-      try {
-        os.write("FINISH");
-        os.newLine();
-        os.flush();
-
-        ftpMultiClient.close();
-        socketServer.stop();
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    });
-
-    messageHandler.startsWith(null, (message, os) -> {
-      System.out.println("Unhandled message: " + message);
-    });
-
-    socketServer.setOnReceiveMessageListener((message, os) -> {
-      System.out.println("Received message: " + message);
-      messageHandler.handleMessage(message, os);
-    });
+    /* ------------------- */
+    /* Start socket server */
+    /* ------------------- */
+    socketServer.setOnReceiveMessageListener(
+        (message, os) -> {
+          System.out.println("Received message: " + message);
+          messageHandler.handleMessage(message, os);
+        });
 
     socketServer.start();
-
   }
 
   private static String removeSpecialCharacters(String str) {
@@ -279,31 +297,9 @@ public class Server {
 
   private static String mapToString(Map<String, Integer> map) {
     return map.entrySet()
-      .stream()
-      .sorted(Map.Entry.comparingByKey())
-      .map(entry -> entry.getKey() + "," + entry.getValue())
-      .collect(Collectors.joining("\n"));
+        .stream()
+        .sorted(Map.Entry.comparingByKey())
+        .map(entry -> entry.getKey() + "," + entry.getValue())
+        .collect(Collectors.joining("\n"));
   }
-}
-
-class MessageHandler {
-  Map<String, MessageProcessor> processors = new HashMap<>();
-
-  @FunctionalInterface
-  interface MessageProcessor {
-    void process(String message, BufferedWriter os);
-  }
-
-  public void handleMessage(String message, BufferedWriter os) {
-    String[] parts = message.split(" ", 2);
-    String prefix = parts[0];
-    String content = parts.length > 1 ? parts[1] : "";
-
-    processors.getOrDefault(prefix, processors.get(null)).process(content, os);
-  }
-
-  public void startsWith(String prefix, MessageProcessor messageProcessor) {
-    processors.put(prefix, messageProcessor);
-  }
-
 }
