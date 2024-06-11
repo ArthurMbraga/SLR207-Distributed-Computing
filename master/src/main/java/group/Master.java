@@ -8,13 +8,15 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Master {
-  static final String[] SERVERS = { "tp-1a201-17", "tp-1a201-18", "tp-1a201-19" };
   static final int FTP_PORT = 3456;
   static final int SOCKET_PORT = 2234;
+  private static String[] servers;
 
   public static void main(String[] args) {
-    FTPMultiClient ftpMultiClient = new FTPMultiClient(SERVERS, FTP_PORT);
-    SocketMultiClient socketConnections = new SocketMultiClient(SERVERS, SOCKET_PORT);
+    servers = args[0].split(",");
+
+    FTPMultiClient ftpMultiClient = new FTPMultiClient(servers, FTP_PORT);
+    SocketMultiClient socketConnections = new SocketMultiClient(servers, SOCKET_PORT);
 
     try {
       socketConnections.start();
@@ -28,15 +30,21 @@ public class Master {
       InputStream inputStream = new FileInputStream(
           "/cal/commoncrawl/CC-MAIN-20230320144934-20230320174934-00001.warc.wet");
 
+      System.out.println("Reading lines");
       List<String> fileLines = Utils.readInputStream(inputStream);
-      List<String> filesContent = Utils.groupStringList(fileLines, SERVERS.length);
-      CompletableFuture<?>[] futures = new CompletableFuture[SERVERS.length];
+      // (Master.class.getResourceAsStream("/sampleText.txt"));
 
-      MyMultipleTimer communication = new MyMultipleTimer(SERVERS.length);
-      MyMultipleTimer synchronization = new MyMultipleTimer(SERVERS.length);
-      MyMultipleTimer computation = new MyMultipleTimer(SERVERS.length);
+      System.out.println("Grouping lines");
+      List<String> filesContent = Utils.groupStringList(fileLines, servers.length);
 
-      for (int i = 0; i < SERVERS.length; i++) {
+      System.out.println("Sending files to servers");
+      CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
+
+      MyMultipleTimer communication = new MyMultipleTimer(servers.length);
+      MyMultipleTimer synchronization = new MyMultipleTimer(servers.length);
+      MyMultipleTimer computation = new MyMultipleTimer(servers.length);
+
+      for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
         String content = filesContent.get(i);
 
@@ -97,11 +105,11 @@ public class Master {
       /* REDUCE phase */
       /* ------------ */
       System.out.println("Starting reduce phase");
-      futures = new CompletableFuture[SERVERS.length];
+      futures = new CompletableFuture[servers.length];
 
       // range = [min, max]
       Integer[] range = { Integer.MAX_VALUE, 0 };
-      for (int i = 0; i < SERVERS.length; i++) {
+      for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
@@ -134,10 +142,10 @@ public class Master {
       /* ----------- */
       System.out.println("Starting group phase");
       System.out.println("Min: " + range[0] + " Max: " + range[1]);
-      String groupMessage = makeGroupsMessage(range[0], range[1] + 1, SERVERS.length);
+      String groupMessage = makeGroupsMessage(range[0], range[1] + 1, servers.length);
 
-      futures = new CompletableFuture[SERVERS.length];
-      for (int i = 0; i < SERVERS.length; i++) {
+      futures = new CompletableFuture[servers.length];
+      for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
@@ -170,8 +178,8 @@ public class Master {
       /* ------------- */
       System.out.println("Starting reduce phase 2");
 
-      futures = new CompletableFuture[SERVERS.length];
-      for (int i = 0; i < SERVERS.length; i++) {
+      futures = new CompletableFuture[servers.length];
+      for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
@@ -194,8 +202,8 @@ public class Master {
       /* -------- */
       System.out.println("Finished");
 
-      futures = new CompletableFuture[SERVERS.length];
-      for (int i = 0; i < SERVERS.length; i++) {
+      futures = new CompletableFuture[servers.length];
+      for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
@@ -211,7 +219,7 @@ public class Master {
       CompletableFuture.allOf(futures).join();
 
       socketConnections.close();
-      ftpMultiClient.close();
+      ftpMultiClient.stop();
 
       /* --------------- */
       /* Writing Metrics */
@@ -220,13 +228,18 @@ public class Master {
       long sync = synchronization.getLongestElapsedTime();
       long comp = computation.getLongestElapsedTime();
 
-      System.out.println("Total elapsed time: " + comm + sync + comp);
+      System.out.println("Total elapsed time: " + (comm + sync + comp));
       System.out.println("Communication: " + comm);
       System.out.println("Synchronization: " + sync);
       System.out.println("Computation: " + comp);
 
-      long metric = (comm + sync) / comp;
+      double metric = (double) (comm + sync) / comp;
       System.out.println("Metric: " + metric);
+
+      /* ----------------- */
+      /* Writing on a file */
+      /* ----------------- */
+      Utils.writeMetricsToFile("Results-" + servers.length + ".txt", comm, sync, comp, metric);
 
     } catch (Exception e) {
       e.printStackTrace();
@@ -234,10 +247,10 @@ public class Master {
   }
 
   private static String makeIpsMessage(int targetIp) {
-    String target = SERVERS[targetIp];
+    String target = servers[targetIp];
     return "IPS " + target + ";" +
-        IntStream.range(0, SERVERS.length)
-            .mapToObj(index -> SERVERS[index])
+        IntStream.range(0, servers.length)
+            .mapToObj(index -> servers[index])
             .collect(Collectors.joining(";"));
   }
 

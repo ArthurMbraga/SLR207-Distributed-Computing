@@ -142,29 +142,12 @@ public class Server {
               .map(range -> new Integer[] { Integer.parseInt(range[0]), Integer.parseInt(range[1]) })
               .toArray(Integer[][]::new);
 
-          String[] filesContents = new String[servers.length];
-
           // Print ranges
           for (int i = 0; i < ranges.length; i++) {
             System.out.println("Range " + i + ": " + ranges[i][0] + " - " + ranges[i][1]);
           }
 
-          for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
-            String key = entry.getKey();
-            Integer value = entry.getValue();
-
-            // Find server index by searching in ranges and finding when the value is in
-            // range [min, max).
-            int serverIndex = IntStream.range(0, ranges.length)
-                .filter(i -> value >= ranges[i][0] && value < ranges[i][1])
-                .findFirst()
-                .orElse(-1);
-
-            if (filesContents[serverIndex] == null)
-              filesContents[serverIndex] = key + "," + value;
-            else
-              filesContents[serverIndex] += "\n" + key + "," + value;
-          }
+          String[] filesContents = generateGroupsFiles(ranges);
 
           try {
             os.write("MAP2");
@@ -213,14 +196,13 @@ public class Server {
             // Clear files
             File directory = new File("/dev/shm/braga-23/");
             File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.SHUFFLE_FILE_PREFIX)
-                || name.startsWith(Constants.GROUP_FILE_PREFIX));
+                || name.startsWith(Constants.GROUP_FILE_PREFIX) || name.startsWith(Constants.SPLIT_FILE_NAME));
 
             if (files != null)
               for (File file : files)
                 file.delete();
 
-            ftpMultiClient.close();
-            socketServer.stop();
+            ftpMultiClient.stop();
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -319,8 +301,53 @@ public class Server {
   private static String mapToString(Map<String, Integer> map) {
     return map.entrySet()
         .stream()
-        .sorted(Map.Entry.comparingByKey())
+        .sorted(Map.Entry.<String, Integer>comparingByValue()
+            .thenComparing(Map.Entry.comparingByKey()))
         .map(entry -> entry.getKey() + "," + entry.getValue())
         .collect(Collectors.joining("\n"));
+  }
+
+  private static String[] generateGroupsFiles(Integer[][] ranges) {
+    String[] filesContents = new String[ranges.length];
+    Thread[] threads = new Thread[ranges.length];
+
+    for (int i = 0; i < ranges.length; i++) {
+      final int index = i;
+      filesContents[index] = "";
+      Integer[] range = ranges[index];
+      StringBuilder sb = new StringBuilder();
+
+      Thread thread = new Thread(() -> {
+        int count = 0;
+        for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
+
+          if (count % 1000 == 0 && index == ranges.length - 1)
+            System.out.println("Key " + count + " out of " + reduceMap.size());
+
+          count++;
+
+          String key = entry.getKey();
+          Integer value = entry.getValue();
+
+          // range [min, max).
+          if (value >= range[0] && value < range[1])
+            sb.append(key).append(",").append(value).append("\n");
+        }
+        filesContents[index] = sb.toString();
+      });
+
+      threads[i] = thread;
+      thread.start();
+    }
+
+    for (Thread thread : threads) {
+      try {
+        thread.join();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
+
+    return filesContents;
   }
 }

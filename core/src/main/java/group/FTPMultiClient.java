@@ -74,7 +74,7 @@ public class FTPMultiClient {
         retrieveFile(filename, ftpClient);
     }
 
-    public void close() throws IOException {
+    public void stop() throws IOException {
         for (FTPClient connection : connections) {
             connection.logout();
             connection.disconnect();
