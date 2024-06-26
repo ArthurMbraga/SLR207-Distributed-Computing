@@ -2,6 +2,7 @@ package group;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,10 +24,10 @@ public class Utils {
 
       Thread thread = new Thread(() -> {
         for (int j = index; j < lines.size(); j += numberOfGroups) {
-          if (j % 1000 == 0)
+          if (j % 200000 == 0)
             System.out.println("Line " + j + " out of " + lines.size());
 
-          sb.append(" ").append(lines.get(j));
+          sb.append(lines.get(j)).append("\n");
         }
         messages.set(index, sb.toString());
       });
@@ -58,18 +59,22 @@ public class Utils {
     return contentList;
   }
 
-  public static void writeMetricsToFile(String fileName, long comm, long sync, long comp, double metric) {
-    try {
-      BufferedWriter writer = new BufferedWriter(new FileWriter(fileName));
-      writer.write("Total elapsed time: " + (comm + sync + comp) + "\n");
-      writer.write("Communication: " + comm + "\n");
-      writer.write("Synchronization: " + sync + "\n");
-      writer.write("Computation: " + comp + "\n");
-      writer.write("Metric: " + metric + "\n");
-      writer.close();
-    } catch (IOException e) {
-      e.printStackTrace();
+  public static void saveMetrics(int nNodes, long comm, long sync, long comp, double metric) {
+      try {
+        String fileName = "results.csv";
+  
+        File file = new File(fileName);
+        boolean fileExists = file.exists();
+  
+        BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
+        if (!fileExists) 
+          writer.write("Total elapsed time,Number of nodes,Communication,Synchronization,Computation,Metric\n");
+        
+        writer.write((comm + sync + comp) + "," + nNodes + "," + comm + "," + sync + "," + comp + "," + metric + "\n");
+        writer.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+  
     }
-
-  }
 }

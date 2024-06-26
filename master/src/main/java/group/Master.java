@@ -44,6 +44,9 @@ public class Master {
       MyMultipleTimer synchronization = new MyMultipleTimer(servers.length);
       MyMultipleTimer computation = new MyMultipleTimer(servers.length);
 
+      MyMultipleTimer split1 = new MyMultipleTimer(servers.length);
+      MyMultipleTimer split2 = new MyMultipleTimer(servers.length);
+
       for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
         String content = filesContent.get(i);
@@ -52,11 +55,14 @@ public class Master {
             .runAsync(() -> {
               try {
                 communication.start(serverIndex);
+                split1.start(serverIndex);
+
                 System.out.println("Sending SPLIT file to server " + serverIndex);
 
                 ftpMultiClient.sendFile(serverIndex, Constants.SPLIT_FILE_NAME, content);
 
                 System.out.println("SPLIT finish from server " + serverIndex);
+                split1.pause(serverIndex);
                 communication.pause(serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
@@ -85,13 +91,14 @@ public class Master {
                 // First response: Map
                 responsesFutures[0].join();
                 computation.pause(serverIndex);
+                System.out.println("MAP finish from server " + serverIndex);
 
                 // Second response: Shuffle
                 communication.start(serverIndex);
                 responsesFutures[1].join();
                 communication.pause(serverIndex);
 
-                System.out.println("MAP finish from server " + serverIndex);
+                System.out.println("SHUFFLE finish from server " + serverIndex);
                 computation.pause(serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
@@ -158,11 +165,13 @@ public class Master {
             // First response: MAP2
             responses[0].join();
             computation.pause(serverIndex);
+            System.out.println("MAP2 finish from server " + serverIndex);
 
             // Second response: SHUFFLE2
             communication.start(serverIndex);
             responses[1].join();
             communication.pause(serverIndex);
+            System.out.println("SHUFFLE2 finish from server " + serverIndex);
 
             synchronization.pause(serverIndex);
           } catch (Exception e) {
@@ -239,8 +248,8 @@ public class Master {
       /* ----------------- */
       /* Writing on a file */
       /* ----------------- */
-      Utils.writeMetricsToFile("Results-" + servers.length + ".txt", comm, sync, comp, metric);
-
+      Utils.saveMetrics(servers.length, comm, sync, comp, metric);
+      System.out.println("Metrics saved");
     } catch (Exception e) {
       e.printStackTrace();
     }

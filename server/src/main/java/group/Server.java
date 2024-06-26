@@ -4,9 +4,11 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,6 +16,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -32,13 +38,22 @@ public class Server {
   private static HashMap<String, Integer> reduceMap;
 
   public static void main(String[] args) {
-    Logger.configure();
-    ftpServer = new FTPServer();
+    clearDirectory();
 
+    Logger.configure();
+
+    try {
+      PrintStream fileOut = new PrintStream(new FileOutputStream("logs.txt"));
+      System.setOut(fileOut);
+      System.setErr(fileOut);
+    } catch (FileNotFoundException e) {
+      e.printStackTrace();
+    }
+
+    ftpServer = new FTPServer();
     socketServer = new SocketServer();
 
     MessageHandler messageHandler = new MessageHandler();
-
     messageHandler.startsWith("MAP",
         (message, os) -> {
           try {
@@ -74,18 +89,24 @@ public class Server {
 
     messageHandler.startsWith("IPS",
         (message, os) -> {
+          System.out.println("Received IPS: " + message);
           String[] ips = message.split(";");
           identifier = ips[0];
           servers = Arrays.copyOfRange(ips, 1, ips.length);
 
           try {
+            System.out.println("Starting FTP multiclient server");
             ftpMultiClient = new FTPMultiClient(servers, FTP_PORT);
             ftpMultiClient.start();
+            System.out.println("Started");
 
             os.write("IPS");
             os.newLine();
             os.flush();
+
+            System.out.println("Sending SPLIT to server " + identifier);
           } catch (IOException e) {
+            System.out.println("Error starting FTP multiclient server");
             e.printStackTrace();
           }
         });
@@ -101,7 +122,7 @@ public class Server {
               String fileContent = mapToString(finalResult);
 
               // Write file in local directory
-              File file = new File("/dev/shm/braga-23/finalResult.txt");
+              File file = new File("/dev/shm/braga-23/" + Constants.FINAL_RESULT_FILE);
               BufferedWriter writer = new BufferedWriter(new FileWriter(file));
               writer.write(fileContent);
               writer.close();
@@ -136,16 +157,14 @@ public class Server {
           /* --- */
           /* Map */
           /* --- */
-
           Integer[][] ranges = Arrays.stream(message.split(";"))
               .map(r -> r.split(","))
               .map(range -> new Integer[] { Integer.parseInt(range[0]), Integer.parseInt(range[1]) })
               .toArray(Integer[][]::new);
 
           // Print ranges
-          for (int i = 0; i < ranges.length; i++) {
+          for (int i = 0; i < ranges.length; i++)
             System.out.println("Range " + i + ": " + ranges[i][0] + " - " + ranges[i][1]);
-          }
 
           String[] filesContents = generateGroupsFiles(ranges);
 
@@ -194,13 +213,7 @@ public class Server {
             os.flush();
 
             // Clear files
-            File directory = new File("/dev/shm/braga-23/");
-            File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.SHUFFLE_FILE_PREFIX)
-                || name.startsWith(Constants.GROUP_FILE_PREFIX) || name.startsWith(Constants.SPLIT_FILE_NAME));
-
-            if (files != null)
-              for (File file : files)
-                file.delete();
+            clearDirectory();
 
             ftpMultiClient.stop();
           } catch (IOException e) {
@@ -225,26 +238,35 @@ public class Server {
     socketServer.start();
   }
 
+  private static void clearDirectory() {
+    File directory = new File("/dev/shm/braga-23/");
+    File[] files = directory.listFiles((dir, name) -> name.startsWith(Constants.SHUFFLE_FILE_PREFIX)
+        || name.startsWith(Constants.GROUP_FILE_PREFIX) || name.startsWith(Constants.SPLIT_FILE_NAME)
+        || name.startsWith(Constants.FINAL_RESULT_FILE));
+
+    if (files != null)
+      for (File file : files)
+        file.delete();
+  }
+
+  private static final Pattern SPECIAL_CHARACTERS_PATTERN = Pattern.compile("[\\p{Punct}\\p{IsPunctuation}]");
+
   private static String removeSpecialCharacters(String str) {
-    return str.replaceAll("[^a-zA-Z0-9 ]", "");
+    return SPECIAL_CHARACTERS_PATTERN.matcher(str).replaceAll("");
   }
 
   private static HashMap<String, Integer> mapFunction() throws FileNotFoundException, IOException {
     String line;
     HashMap<String, Integer> hashMap = new HashMap<>();
-    BufferedReader reader = new BufferedReader(new FileReader("/dev/shm/braga-23/" + Constants.SPLIT_FILE_NAME));
 
-    while ((line = reader.readLine()) != null) {
-      String[] words = removeSpecialCharacters(line).toLowerCase().split(" ");
-      for (String word : words) {
-        if (hashMap.containsKey(word)) {
-          hashMap.put(word, hashMap.get(word) + 1);
-        } else {
-          hashMap.put(word, 1);
-        }
+    try (BufferedReader reader = new BufferedReader(new FileReader("/dev/shm/braga-23/" + Constants.SPLIT_FILE_NAME))) {
+      while ((line = reader.readLine()) != null) {
+        String[] words = removeSpecialCharacters(line).toLowerCase().split("\\s+");
+        for (String word : words)
+          hashMap.merge(word, 1, Integer::sum);
       }
     }
-    reader.close();
+
     return hashMap;
   }
 
@@ -309,20 +331,21 @@ public class Server {
 
   private static String[] generateGroupsFiles(Integer[][] ranges) {
     String[] filesContents = new String[ranges.length];
-    Thread[] threads = new Thread[ranges.length];
+    ExecutorService executor = Executors.newFixedThreadPool(ranges.length);
+    CountDownLatch latch = new CountDownLatch(ranges.length);
 
     for (int i = 0; i < ranges.length; i++) {
       final int index = i;
-      filesContents[index] = "";
       Integer[] range = ranges[index];
-      StringBuilder sb = new StringBuilder();
 
-      Thread thread = new Thread(() -> {
+      executor.submit(() -> {
+        StringBuilder sb = new StringBuilder();
         int count = 0;
-        for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
 
-          if (count % 1000 == 0 && index == ranges.length - 1)
+        for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
+          if (count % 1000 == 0 && index == ranges.length - 1) {
             System.out.println("Key " + count + " out of " + reduceMap.size());
+          }
 
           count++;
 
@@ -330,22 +353,21 @@ public class Server {
           Integer value = entry.getValue();
 
           // range [min, max).
-          if (value >= range[0] && value < range[1])
+          if (value >= range[0] && value < range[1]) {
             sb.append(key).append(",").append(value).append("\n");
+          }
         }
         filesContents[index] = sb.toString();
+        latch.countDown();
       });
-
-      threads[i] = thread;
-      thread.start();
     }
 
-    for (Thread thread : threads) {
-      try {
-        thread.join();
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
+    try {
+      latch.await();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      executor.shutdown();
     }
 
     return filesContents;

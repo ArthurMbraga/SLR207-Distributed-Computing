@@ -16,8 +16,12 @@ file_suffix = "-1.0-jar-with-dependencies.jar"
 remote_folder = "/tmp/{}/".format(login)
 
 # List of computers
-computers = ["tp-1a201-37", "tp-1a222-05", "tp-1a226-24",
-             "tp-1a226-28", "tp-1a222-11", "tp-1a226-00", "tp-1a252-12", "tp-1a252-13"]
+computers = ["tp-1a226-24", "tp-1a201-37", "tp-1a207-30", "tp-1a226-03",
+             "tp-1a201-02", "tp-1a201-01", "tp-1a201-07", "tp-1a226-28",
+             "tp-1a201-05", "tp-1a201-18", "tp-1a201-08", "tp-1a201-09",
+             "tp-1a207-31", "tp-1a207-32", "tp-1a207-33", "tp-1a207-35",
+             "tp-1a207-36", "tp-1a207-37",
+             ]
 master = "tp-1a226-21"
 
 # Clear the terminal
@@ -64,6 +68,12 @@ for c in allComputers:
                     print(line, end="")
                 for line in stderr:
                     print(line, end="")
+
+            # Save results.csv file to disk and delete old results.csv
+            metrics_file_name = "results.csv"
+            with SCPClient(ssh.get_transport()) as scp:
+                scp.get("{}{}".format(remote_folder, metrics_file_name), "./")
+            ssh.exec_command("rm -rf {}".format(remote_folder))
 
     except paramiko.AuthenticationException:
         print("Authentication failed for {}".format(c))
