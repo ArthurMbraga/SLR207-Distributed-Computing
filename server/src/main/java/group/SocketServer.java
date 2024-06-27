@@ -11,7 +11,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SocketServer {
-    private static final int PORT = 2234;
     private ExecutorService executor;
     private MessageHandler messageHandler;
     private boolean isStopped = false;
@@ -26,7 +25,7 @@ public class SocketServer {
     }
 
     public void start() {
-        try (ServerSocket listener = new ServerSocket(PORT)) {
+        try (ServerSocket listener = new ServerSocket(Constants.SOCKET_PORT)) {
             System.out.println("Server is waiting to accept users...");
 
             while (!isStopped) {

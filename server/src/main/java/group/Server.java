@@ -25,7 +25,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class Server {
-  static final int FTP_PORT = 3456;
 
   static FTPServer ftpServer;
   static FTPMultiClient ftpMultiClient;
@@ -96,7 +95,7 @@ public class Server {
 
           try {
             System.out.println("Starting FTP multiclient server");
-            ftpMultiClient = new FTPMultiClient(servers, FTP_PORT);
+            ftpMultiClient = new FTPMultiClient(servers, Constants.FTP_PORT);
             ftpMultiClient.start();
             System.out.println("Started");
 

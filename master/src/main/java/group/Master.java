@@ -2,21 +2,23 @@ package group;
 
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import group.Metrics.MetricCollector;
+
 public class Master {
-  static final int FTP_PORT = 3456;
-  static final int SOCKET_PORT = 2234;
   private static String[] servers;
 
   public static void main(String[] args) {
     servers = args[0].split(",");
 
-    FTPMultiClient ftpMultiClient = new FTPMultiClient(servers, FTP_PORT);
-    SocketMultiClient socketConnections = new SocketMultiClient(servers, SOCKET_PORT);
+    FTPMultiClient ftpMultiClient = new FTPMultiClient(servers, Constants.FTP_PORT);
+    SocketMultiClient socketConnections = new SocketMultiClient(servers, Constants.SOCKET_PORT);
 
     try {
       socketConnections.start();
@@ -32,7 +34,6 @@ public class Master {
 
       System.out.println("Reading lines");
       List<String> fileLines = Utils.readInputStream(inputStream);
-      // (Master.class.getResourceAsStream("/sampleText.txt"));
 
       System.out.println("Grouping lines");
       List<String> filesContent = Utils.groupStringList(fileLines, servers.length);
@@ -40,66 +41,73 @@ public class Master {
       System.out.println("Sending files to servers");
       CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
 
-      MyMultipleTimer communication = new MyMultipleTimer(servers.length);
-      MyMultipleTimer synchronization = new MyMultipleTimer(servers.length);
-      MyMultipleTimer computation = new MyMultipleTimer(servers.length);
+      MetricCollector metricCollector = new MetricCollector(servers.length);
 
-      MyMultipleTimer split1 = new MyMultipleTimer(servers.length);
-      MyMultipleTimer split2 = new MyMultipleTimer(servers.length);
+      // Timers 
+      final String COMM = "Communication";
+      final String SYNC = "Synchronization";
+      final String COMP = "Computation";
+
+      final String SPLT = "Split";
+      final String MAP1 = "Map1";
+      final String SUF1 = "Shuffle1";
+      final String RED1 = "Reduce1";
+
+      final String MAP2 = "Map2";
+      final String SUF2 = "Shuffle2";
+      final String RED2 = "Reduce2";
 
       for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
-        String content = filesContent.get(i);
+        String content = filesContent.get(serverIndex);
 
         futures[serverIndex] = CompletableFuture
             .runAsync(() -> {
               try {
-                communication.start(serverIndex);
-                split1.start(serverIndex);
-
-                System.out.println("Sending SPLIT file to server " + serverIndex);
+                metricCollector.start(serverIndex, COMM, SPLT);
+                System.out.println("Sending SPLIT1 file to server " + serverIndex);
 
                 ftpMultiClient.sendFile(serverIndex, Constants.SPLIT_FILE_NAME, content);
 
-                System.out.println("SPLIT finish from server " + serverIndex);
-                split1.pause(serverIndex);
-                communication.pause(serverIndex);
+                System.out.println("SPLIT1 finish from server " + serverIndex);
+                metricCollector.pause(serverIndex, COMM, SPLT);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             })
             .thenRunAsync(() -> {
               try {
-                synchronization.start(serverIndex);
+                metricCollector.start(serverIndex, SYNC);
                 System.out.println("Sending IPS to server " + serverIndex);
 
                 String serverList = makeIpsMessage(serverIndex);
                 socketConnections.sendMessage(serverIndex, serverList);
 
                 System.out.println("ACK from server " + serverIndex);
-                synchronization.pause(serverIndex);
+                metricCollector.pause(serverIndex, SYNC);
               } catch (Exception e) {
                 e.printStackTrace();
               }
             }).thenRunAsync(() -> {
               try {
-                computation.start(serverIndex);
+                metricCollector.start(serverIndex, COMP, MAP1);
+
                 System.out.println("Sending 'MAP' to server " + serverIndex);
 
                 CompletableFuture<String>[] responsesFutures = socketConnections.sendMessage(serverIndex, "MAP", 2);
 
                 // First response: Map
                 responsesFutures[0].join();
-                computation.pause(serverIndex);
+
                 System.out.println("MAP finish from server " + serverIndex);
+                metricCollector.pause(serverIndex, COMP, MAP1);
+                metricCollector.start(serverIndex, COMM, SUF1);
 
                 // Second response: Shuffle
-                communication.start(serverIndex);
                 responsesFutures[1].join();
-                communication.pause(serverIndex);
+                metricCollector.pause(serverIndex, COMM, SUF1);
 
                 System.out.println("SHUFFLE finish from server " + serverIndex);
-                computation.pause(serverIndex);
               } catch (Exception e) {
                 e.printStackTrace();
               }
@@ -121,7 +129,7 @@ public class Master {
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
-            computation.start(serverIndex);
+            metricCollector.start(serverIndex, COMP, RED1);
             String response = socketConnections.sendMessage(serverIndex, "REDUCE");
 
             String[] minMax = response.split(",");
@@ -135,7 +143,7 @@ public class Master {
             if (max > range[1])
               range[1] = max;
 
-            computation.pause(serverIndex);
+            metricCollector.pause(serverIndex, COMP, RED1);
           } catch (Exception e) {
             e.printStackTrace();
           }
@@ -157,23 +165,20 @@ public class Master {
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
-            computation.start(serverIndex);
+            metricCollector.start(serverIndex, COMP, MAP2);
 
             System.out.println("Sending GROUP message to server " + serverIndex);
             CompletableFuture<String>[] responses = socketConnections.sendMessage(serverIndex, groupMessage, 2);
 
             // First response: MAP2
             responses[0].join();
-            computation.pause(serverIndex);
             System.out.println("MAP2 finish from server " + serverIndex);
-
+            metricCollector.pause(serverIndex, COMP, MAP2);
+            metricCollector.start(serverIndex, COMM, SUF2);
             // Second response: SHUFFLE2
-            communication.start(serverIndex);
             responses[1].join();
-            communication.pause(serverIndex);
+            metricCollector.pause(serverIndex, COMM, SUF2);
             System.out.println("SHUFFLE2 finish from server " + serverIndex);
-
-            synchronization.pause(serverIndex);
           } catch (Exception e) {
             e.printStackTrace();
           }
@@ -193,11 +198,12 @@ public class Master {
 
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
-            computation.start(serverIndex);
-            socketConnections.sendMessageAsync(serverIndex, "REDUCE2");
-            System.out.println("Sent REDUCE2 to server " + serverIndex);
-            computation.pause(serverIndex);
+            metricCollector.start(serverIndex, COMP, RED2);
 
+            socketConnections.sendMessageAsync(serverIndex, "REDUCE2");
+
+            System.out.println("Sent REDUCE2 to server " + serverIndex);
+            metricCollector.pause(serverIndex, COMP, RED2);
           } catch (Exception e) {
             e.printStackTrace();
           }
@@ -233,9 +239,18 @@ public class Master {
       /* --------------- */
       /* Writing Metrics */
       /* --------------- */
-      long comm = communication.getLongestElapsedTime();
-      long sync = synchronization.getLongestElapsedTime();
-      long comp = computation.getLongestElapsedTime();
+      Map<String, Number> settings = new HashMap<String, Number>() {
+        {
+          put("Number of nodes", servers.length);
+        }
+      };
+
+      metricCollector.writeMetrics(Constants.METRICS_FILE, settings);
+      System.out.println("Metrics saved");
+
+      long comm = metricCollector.getLongestElapsedTime(COMM);
+      long sync = metricCollector.getLongestElapsedTime(SYNC);
+      long comp = metricCollector.getLongestElapsedTime(COMP);
 
       System.out.println("Total elapsed time: " + (comm + sync + comp));
       System.out.println("Communication: " + comm);
@@ -245,11 +260,6 @@ public class Master {
       double metric = (double) (comm + sync) / comp;
       System.out.println("Metric: " + metric);
 
-      /* ----------------- */
-      /* Writing on a file */
-      /* ----------------- */
-      Utils.saveMetrics(servers.length, comm, sync, comp, metric);
-      System.out.println("Metrics saved");
     } catch (Exception e) {
       e.printStackTrace();
     }

@@ -1,4 +1,4 @@
-package group;
+package group.Metrics;
 
 public class MyMultipleTimer {
   private MyTimer[] timers;
