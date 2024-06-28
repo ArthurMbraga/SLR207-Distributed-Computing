@@ -1,6 +1,7 @@
 package group;
 
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -75,6 +76,8 @@ public class Master {
       final String MAP2 = "Map2";
       final String SUF2 = "Shuffle2";
       final String RED2 = "Reduce2";
+
+      metricCollector.createTimer(COMM, SYNC, COMP, SPLT, MAP1, SUF1, RED1, MAP2, SUF2, RED2);
 
       for (int i = 0; i < servers.length; i++) {
         int serverIndex = i;
@@ -165,9 +168,10 @@ public class Master {
               range[1] = max;
 
             System.out.println("REDUCE1 finished from server " + serverIndex);
-            metricCollector.pause(serverIndex, COMP, RED1);
           } catch (Exception e) {
             e.printStackTrace();
+          } finally {
+            metricCollector.pause(serverIndex, COMP, RED1);
           }
         });
       }
@@ -256,8 +260,6 @@ public class Master {
 
       CompletableFuture.allOf(futures).join();
 
-      socketConnections.close();
-
       /* --------------- */
       /* Writing Metrics */
       /* --------------- */
@@ -285,6 +287,12 @@ public class Master {
 
     } catch (Exception e) {
       e.printStackTrace();
+    } finally {
+      try {
+        socketConnections.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
   }
 

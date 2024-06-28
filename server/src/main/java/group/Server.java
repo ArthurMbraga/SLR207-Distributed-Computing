@@ -96,7 +96,6 @@ public class Server {
           try {
             System.out.println("Starting FTP multiclient server");
             ftpMultiClient = new FTPMultiClient(servers, Constants.FTP_PORT);
-            System.out.println("Started");
 
             os.write("IPS");
             os.newLine();

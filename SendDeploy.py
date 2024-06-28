@@ -44,7 +44,7 @@ if len(allComputers) != len(set(allComputers)):
 
 def attach_and_run_master(ssh, ips, amount_of_data):
     stdin, stdout, stderr = ssh.exec_command(
-        "cd {}; java -Xms10g -Xmx10g -jar {}{} {} {}".format(
+        "cd {}; java -Xms8g -Xmx10g -jar {}{} {} {}".format(
             remote_folder, master_project_name, file_suffix, ",".join(ips), amount_of_data))
 
     # Print all output and error messages
@@ -96,7 +96,7 @@ for c in allComputers:
 
         if c != master:
             ssh.exec_command(
-                "cd {}; java -Xms10g -Xmx10g -jar {}{}".format(remote_folder, project_name, file_suffix))
+                "cd {}; java -Xms8g -Xmx10g -jar {}{}".format(remote_folder, project_name, file_suffix))
             print("Successfully deployed on {} ({})".format(c, index))
 
         else:
@@ -105,14 +105,15 @@ for c in allComputers:
             ssh.exec_command("sleep 1")
 
             # Varying number of nodes
-            for i in range(1, len(computers)):
-                attach_and_run_master(ssh, computers[:i], 0.5)
+            for v in [0.1, 0.05, 0.01]:
+                for i in range(1, len(computers)):
+                    attach_and_run_master(ssh, computers[:i], v)
 
             # Varying amount of data
-            # for percentage in range(1, 11):
-            #     print("Running with {}% of the data".format(percentage*10))
-            #     attach_and_run_master(
-            #         ssh, computers[:len(computers)//3], percentage/10)
+            for percentage in range(1, 11):
+                print("Running with {}% of the data".format(percentage*10))
+                attach_and_run_master(
+                    ssh, computers[:len(computers)//3], percentage/10)
 
             # delete old results.csv
             ssh.exec_command("rm -rf {}".format(remote_folder))

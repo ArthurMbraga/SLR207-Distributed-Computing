@@ -17,10 +17,15 @@ public class MetricCollector {
     this.numberOfInstances = numberOfInstances;
   }
 
+  public void createTimer(String... name) {
+    for (String timerName : name)
+      timerMap.put(timerName, new MyMultipleTimer(numberOfInstances));
+  }
+
   private void start(int instanceIndex, String timerName) {
     try {
       if (!timerMap.containsKey(timerName))
-        timerMap.put(timerName, new MyMultipleTimer(numberOfInstances));
+        throw new IllegalArgumentException("Timer " + timerName + " does not exist");
 
       timerMap.get(timerName).start(instanceIndex);
     } catch (Exception e) {
