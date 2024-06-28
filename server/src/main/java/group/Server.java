@@ -96,7 +96,6 @@ public class Server {
           try {
             System.out.println("Starting FTP multiclient server");
             ftpMultiClient = new FTPMultiClient(servers, Constants.FTP_PORT);
-            ftpMultiClient.start();
             System.out.println("Started");
 
             os.write("IPS");
@@ -131,7 +130,7 @@ public class Server {
           }
         });
 
-    messageHandler.startsWith("REDUCE",
+    messageHandler.startsWith("REDUCE1",
         (message, os) -> {
           try {
             File directory = new File("/dev/shm/braga-23/");
@@ -142,6 +141,11 @@ public class Server {
               Integer[] minMax = findMinMaxFreq(reduceMap);
 
               os.write(minMax[0] + "," + minMax[1]);
+              os.newLine();
+              os.flush();
+            } else {
+              System.out.println("No files found in directory");
+              os.write("-1,0");
               os.newLine();
               os.flush();
             }
@@ -166,6 +170,8 @@ public class Server {
             System.out.println("Range " + i + ": " + ranges[i][0] + " - " + ranges[i][1]);
 
           String[] filesContents = generateGroupsFiles(ranges);
+
+          System.out.println("Generated files contents");
 
           try {
             os.write("MAP2");
@@ -214,7 +220,6 @@ public class Server {
             // Clear files
             clearDirectory();
 
-            ftpMultiClient.stop();
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -342,7 +347,7 @@ public class Server {
         int count = 0;
 
         for (Map.Entry<String, Integer> entry : reduceMap.entrySet()) {
-          if (count % 1000 == 0 && index == ranges.length - 1) {
+          if (count % 10000 == 0 && index == ranges.length - 1) {
             System.out.println("Key " + count + " out of " + reduceMap.size());
           }
 
@@ -356,6 +361,7 @@ public class Server {
             sb.append(key).append(",").append(value).append("\n");
           }
         }
+
         filesContents[index] = sb.toString();
         latch.countDown();
       });
@@ -368,6 +374,8 @@ public class Server {
     } finally {
       executor.shutdown();
     }
+
+    reduceMap = null;
 
     return filesContents;
   }

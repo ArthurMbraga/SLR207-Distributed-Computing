@@ -5,23 +5,28 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MetricCollector {
   private int numberOfInstances;
-  private Map<String, MyMultipleTimer> timerMap = new HashMap<>();
+  private Map<String, MyMultipleTimer> timerMap = new ConcurrentHashMap<>();
 
   public MetricCollector(int numberOfInstances) {
     this.numberOfInstances = numberOfInstances;
   }
 
   private void start(int instanceIndex, String timerName) {
-    if (!timerMap.containsKey(timerName))
-      timerMap.put(timerName, new MyMultipleTimer(numberOfInstances));
+    try {
+      if (!timerMap.containsKey(timerName))
+        timerMap.put(timerName, new MyMultipleTimer(numberOfInstances));
 
-    timerMap.get(timerName).start(instanceIndex);
+      timerMap.get(timerName).start(instanceIndex);
+    } catch (Exception e) {
+      System.out.println("Timer " + timerName + " failed to start");
+      e.printStackTrace();
+    }
   }
 
   public void start(int instanceIndex, String... timerNames) {
@@ -30,7 +35,12 @@ public class MetricCollector {
   }
 
   private void pause(int instanceIndex, String timerName) {
-    timerMap.get(timerName).pause(instanceIndex);
+    try {
+      timerMap.get(timerName).pause(instanceIndex);
+    } catch (Exception e) {
+      System.out.println("Timer " + timerName + " failed to pause");
+      e.printStackTrace();
+    }
   }
 
   public void pause(int instanceIndex, String... timerNames) {

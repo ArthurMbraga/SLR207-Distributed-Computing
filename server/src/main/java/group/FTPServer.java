@@ -27,8 +27,8 @@ public class FTPServer {
         listenerFactory.setPort(PORT);
 
         ConnectionConfigFactory connectionConfigFactory = new ConnectionConfigFactory();
-        connectionConfigFactory.setMaxLogins(20); // Max total connections
-        connectionConfigFactory.setMaxThreads(20); // Max connections per IP
+        connectionConfigFactory.setMaxLogins(Constants.MAX_CONNECTIONS); // Max total connections
+        connectionConfigFactory.setMaxThreads(Constants.MAX_CONNECTIONS); // Max connections per IP
 
         serverFactory.setConnectionConfig(connectionConfigFactory.createConnectionConfig());
         serverFactory.addListener("default", listenerFactory.createListener());

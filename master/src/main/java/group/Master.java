@@ -2,6 +2,7 @@ package group;
 
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,34 +17,52 @@ public class Master {
 
   public static void main(String[] args) {
     servers = args[0].split(",");
+    float dataPercentage = Float.parseFloat(args[1]);
+
+    if (dataPercentage <= 0 || dataPercentage > 1) {
+      System.out.println("Invalid percentage");
+      return;
+    }
 
     FTPMultiClient ftpMultiClient = new FTPMultiClient(servers, Constants.FTP_PORT);
     SocketMultiClient socketConnections = new SocketMultiClient(servers, Constants.SOCKET_PORT);
 
     try {
       socketConnections.start();
-      ftpMultiClient.start();
 
       /* ----------- */
       /* Split phase */
       /* ----------- */
       System.out.println("Starting split phase");
 
-      InputStream inputStream = new FileInputStream(
-          "/cal/commoncrawl/CC-MAIN-20230320144934-20230320174934-00001.warc.wet");
+      // Total size = 661 MB
 
-      System.out.println("Reading lines");
-      List<String> fileLines = Utils.readInputStream(inputStream);
+      final int FILES_AMOUNT = 3;
+      final float FILE_SIZE_MB = 330;
+      String[] fileNames = new String[FILES_AMOUNT];
+      for (int i = 0; i < FILES_AMOUNT; i++) {
+        fileNames[i] = "/cal/commoncrawl/CC-MAIN-20230320144934-20230320174934-00" + String.format("%03d", i)
+            + ".warc.wet";
+      }
+
+      List<String> fileLines = new ArrayList<>();
+      for (String fileName : fileNames) {
+        System.out.println("Reading file: " + fileName);
+        InputStream inputStream = new FileInputStream(fileName);
+        List<String> lines = Utils.readInputStream(inputStream, dataPercentage);
+        fileLines.addAll(lines);
+      }
 
       System.out.println("Grouping lines");
       List<String> filesContent = Utils.groupStringList(fileLines, servers.length);
+      fileLines = null;
 
       System.out.println("Sending files to servers");
       CompletableFuture<?>[] futures = new CompletableFuture[servers.length];
 
       MetricCollector metricCollector = new MetricCollector(servers.length);
 
-      // Timers 
+      // Timers
       final String COMM = "Communication";
       final String SYNC = "Synchronization";
       final String COMP = "Computation";
@@ -113,6 +132,7 @@ public class Master {
               }
             });
       }
+      filesContent = null;
 
       CompletableFuture.allOf(futures).join();
 
@@ -130,19 +150,21 @@ public class Master {
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
             metricCollector.start(serverIndex, COMP, RED1);
-            String response = socketConnections.sendMessage(serverIndex, "REDUCE");
+            System.out.println("Sending REDUCE1 to server " + serverIndex);
+            String response = socketConnections.sendMessage(serverIndex, "REDUCE1");
 
             String[] minMax = response.split(",");
 
             int min = Integer.parseInt(minMax[0]);
             int max = Integer.parseInt(minMax[1]);
 
-            if (min < range[0])
+            if (min > 0 && min < range[0])
               range[0] = min;
 
             if (max > range[1])
               range[1] = max;
 
+            System.out.println("REDUCE1 finished from server " + serverIndex);
             metricCollector.pause(serverIndex, COMP, RED1);
           } catch (Exception e) {
             e.printStackTrace();
@@ -199,10 +221,11 @@ public class Master {
         futures[serverIndex] = CompletableFuture.runAsync(() -> {
           try {
             metricCollector.start(serverIndex, COMP, RED2);
+            System.out.println("Sending REDUCE2 to server " + serverIndex);
 
             socketConnections.sendMessageAsync(serverIndex, "REDUCE2");
 
-            System.out.println("Sent REDUCE2 to server " + serverIndex);
+            System.out.println("REDUCE2 finished from server " + serverIndex);
             metricCollector.pause(serverIndex, COMP, RED2);
           } catch (Exception e) {
             e.printStackTrace();
@@ -234,7 +257,6 @@ public class Master {
       CompletableFuture.allOf(futures).join();
 
       socketConnections.close();
-      ftpMultiClient.stop();
 
       /* --------------- */
       /* Writing Metrics */
@@ -242,6 +264,7 @@ public class Master {
       Map<String, Number> settings = new HashMap<String, Number>() {
         {
           put("Number of nodes", servers.length);
+          put("Amount of data (MB)", dataPercentage * FILE_SIZE_MB * FILES_AMOUNT);
         }
       };
 

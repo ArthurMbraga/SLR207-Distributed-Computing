@@ -1,7 +1,11 @@
 package group;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -13,8 +17,6 @@ public class FTPMultiClient {
     String[] hosts;
     int port;
 
-    FTPClient[] connections;
-
     final String USERNAME = "toto";
     final String PASSWORD = "tata";
 
@@ -23,18 +25,32 @@ public class FTPMultiClient {
         this.port = port;
     }
 
-    public void start() throws IOException {
-        connections = new FTPClient[hosts.length];
-        for (int i = 0; i < hosts.length; i++) {
-            connections[i] = new FTPClient();
-            connections[i].connect(hosts[i], port);
-            connections[i].login(USERNAME, PASSWORD);
-            connections[i].enterLocalPassiveMode();
-            connections[i].setFileType(FTP.BINARY_FILE_TYPE);
+    private FTPClient start(int index) throws IOException {
+        FTPClient connection = new FTPClient();
+        int attempts = 0;
+        boolean connected = false;
+        while (attempts < 3 && !connected) {
+            try {
+                connection.connect(hosts[index], port);
+                connection.login(USERNAME, PASSWORD);
+                connection.enterLocalPassiveMode();
+                connection.setFileType(FTP.BINARY_FILE_TYPE);
+                connected = true;
+            } catch (IOException e) {
+                attempts++;
+                System.out.println("Connection attempt " + attempts + " failed. Retrying...");
+            }
         }
+
+        if (!connected) {
+            throw new IOException("Failed to connect to FTP server after 3 attempts.");
+        }
+
+        return connection;
     }
 
     private void retrieveFile(String fileName, FTPClient connection) throws IOException {
+
         // Code to retrieve and display file content
         InputStream inputStream = connection.retrieveFileStream(fileName);
         BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
@@ -49,14 +65,28 @@ public class FTPMultiClient {
     private final int SUCCESS_CODE = 226;
 
     private void createNewFile(String content, String fileName, FTPClient connection) throws IOException {
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
-        connection.storeFile(fileName, inputStream);
-        int replyCode = connection.getReplyCode();
+        // Create a temporary file
+        File tempFile = File.createTempFile("upload", ".tmp");
+        tempFile.deleteOnExit();
 
-        if (replyCode == SUCCESS_CODE) {
-            System.out.println("File uploaded successfully.");
-        } else {
-            System.out.println("File upload failed. FTP Error code: " + replyCode);
+        // Write content to the temporary file
+        try (FileWriter writer = new FileWriter(tempFile)) {
+            writer.write(content);
+        }
+
+        // Stream the temporary file to the FTP server
+        try (InputStream inputStream = new BufferedInputStream(new FileInputStream(tempFile))) {
+            connection.storeFile(fileName, inputStream);
+            int replyCode = connection.getReplyCode();
+
+            if (replyCode == SUCCESS_CODE) {
+                System.out.println("File uploaded successfully.");
+            } else {
+                System.out.println("File upload failed. FTP Error code: " + replyCode);
+            }
+        } finally {
+            // Ensure the temporary file is deleted
+            tempFile.delete();
         }
     }
 
@@ -65,19 +95,19 @@ public class FTPMultiClient {
             throw new IllegalArgumentException("Filename or content cannot be null");
         }
 
-        FTPClient ftpClient = connections[id];
+        FTPClient ftpClient = start(id);
         createNewFile(content, filename, ftpClient);
+        stop(ftpClient);
     }
 
     public void getFile(int id, String filename) throws IOException {
-        FTPClient ftpClient = connections[id];
+        FTPClient ftpClient = start(id);
         retrieveFile(filename, ftpClient);
+        stop(ftpClient);
     }
 
-    public void stop() throws IOException {
-        for (FTPClient connection : connections) {
-            connection.logout();
-            connection.disconnect();
-        }
+    public void stop(FTPClient connection) throws IOException {
+        connection.logout();
+        connection.disconnect();
     }
 }
